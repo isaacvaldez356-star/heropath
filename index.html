@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HeroPath — Tu camino legendario</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+:root{
+  --gold:#C9A84C;--gold-light:#E8C97A;--gold-dark:#8A6A28;
+  --purple:#7B5EA7;--purple-light:#A07FCC;--purple-dark:#4A3270;
+  --teal:#2BBFA0;--bg:#0A0A0F;--bg2:#12121A;--bg3:#1A1A26;--bg4:#222233;
+  --border:rgba(201,168,76,0.15);--border2:rgba(201,168,76,0.3);
+  --text:#E8E0D0;--text2:#A09880;--text3:#665E50;
+  --red:#C0392B;--orange:#E67E22;
+  --font-title:'Cinzel',serif;--font-body:'Inter',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:14px;line-height:1.6;min-height:100vh;}
+h1,h2,h3{font-family:var(--font-title);font-weight:500;letter-spacing:0.05em;}
+button{cursor:pointer;border:none;background:none;font-family:var(--font-body);color:var(--text);}
+input,textarea{font-family:var(--font-body);}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:var(--bg2);}
+::-webkit-scrollbar-thumb{background:var(--gold-dark);border-radius:2px;}
+.card{background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;padding:16px;}
+.card-sm{background:var(--bg3);border:0.5px solid var(--border);border-radius:8px;padding:10px 12px;}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 9px;border-radius:20px;border:0.5px solid;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;transition:all .2s;cursor:pointer;border:0.5px solid var(--border2);}
+.btn-gold{background:var(--gold);color:#0A0A0F;border-color:var(--gold);}
+.btn-gold:hover{background:var(--gold-light);}
+.btn-ghost{background:transparent;color:var(--text2);border-color:var(--border2);}
+.btn-ghost:hover{color:var(--text);border-color:var(--gold);}
+.prog-bar{height:4px;border-radius:2px;background:var(--bg4);overflow:hidden;}
+.prog-fill{height:100%;border-radius:2px;transition:width .5s ease;}
+.input{width:100%;background:var(--bg3);border:0.5px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;outline:none;transition:border .2s;}
+.input:focus{border-color:var(--gold);}
+.input::placeholder{color:var(--text3);}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+.fade-in{animation:fadeIn .3s ease forwards;}
+@keyframes xpFloat{0%{opacity:1;transform:translateY(0) scale(1);}40%{transform:translateY(-30px) scale(1.3);}100%{opacity:0;transform:translateY(-70px) scale(0.9);}}
+.xp-toast{animation:xpFloat 1.4s ease forwards;position:fixed;z-index:9999;pointer-events:none;font-family:var(--font-title);font-size:22px;font-weight:700;color:var(--gold);text-shadow:0 0 24px rgba(201,168,76,0.9);white-space:nowrap;}
+@keyframes rankAnim{0%{transform:scale(0.6);opacity:0;}60%{transform:scale(1.08);}100%{transform:scale(1);opacity:1;}}
+.rank-anim{animation:rankAnim .5s ease forwards;}
+.spinner{border:2px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.err{background:rgba(192,57,43,0.12);border:0.5px solid rgba(192,57,43,0.4);border-radius:8px;padding:10px 14px;font-size:12px;color:#E07060;}
+.ok{background:rgba(43,191,160,0.1);border:0.5px solid rgba(43,191,160,0.35);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--teal);}
+.mission-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:0.5px solid var(--border);transition:opacity .2s;}
+.mission-row:last-of-type{border-bottom:none;}
+.mission-check{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .25s;cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback,createContext,useContext}=React;
+
+const API="lovely-magic-production-a3a2.up.railway.app";
+
+// ── API helper ────────────────────────────────────────────
+async function api(method,path,body,token){
+  const h={"Content-Type":"application/json"};
+  if(token) h["Authorization"]=`Bearer ${token}`;
+  const r=await fetch(API+path,{method,headers:h,body:body?JSON.stringify(body):undefined});
+  const d=await r.json();
+  if(!r.ok) throw new Error(d.error||"Error del servidor");
+  return d;
+}
+
+// ── Global state context ──────────────────────────────────
+const Ctx=createContext(null);
+function useApp(){return useContext(Ctx);}
+
+// ── RANKS ─────────────────────────────────────────────────
+const RANKS=[
+  {name:"Recluta",icon:"ti-shield",color:"#888"},
+  {name:"Guerrero",icon:"ti-sword",color:"#C0392B"},
+  {name:"Héroe",icon:"ti-helmet",color:"#7B5EA7"},
+  {name:"Leyenda",icon:"ti-crown",color:"#C9A84C"},
+  {name:"Inmortal",icon:"ti-star",color:"#C0729E"},
+];
+const rankColor=n=>RANKS.find(r=>r.name===n)?.color||"#888";
+const rankIcon=n=>RANKS.find(r=>r.name===n)?.icon||"ti-shield";
+
+// ── BRANCHES ──────────────────────────────────────────────
+const BRANCHES=[
+  {id:"body",name:"Cuerpo",icon:"ti-barbell",color:"#C0392B",nodes:[
+    {id:"monje",name:"Monje atleta",tier:1,status:"done",pct:100},
+    {id:"hybrid",name:"Hybrid athlete",tier:2,status:"progress",pct:55},
+    {id:"skin",name:"Skin legendaria",tier:2,status:"progress",pct:30},
+    {id:"optimiza",name:"Optimiza",tier:3,status:"locked",pct:0},
+  ]},
+  {id:"mind",name:"Mente",icon:"ti-brain",color:"#7B5EA7",nodes:[
+    {id:"salud",name:"Salud mental",tier:1,status:"done",pct:100},
+    {id:"ultraprod",name:"Ultraproductividad",tier:2,status:"progress",pct:70},
+    {id:"estudiante",name:"Estudiante de 10",tier:2,status:"progress",pct:40},
+    {id:"pensador",name:"Pensador sistémico",tier:3,status:"locked",pct:0},
+  ]},
+  {id:"social",name:"Social",icon:"ti-users",color:"#2BBFA0",nodes:[
+    {id:"socialnat",name:"Social natural",tier:1,status:"done",pct:100},
+    {id:"english",name:"Heroes English",tier:2,status:"progress",pct:25},
+    {id:"oratoria",name:"Oratoria",tier:2,status:"locked",pct:0},
+  ]},
+  {id:"disc",name:"Disciplina",icon:"ti-flame",color:"#E67E22",nodes:[
+    {id:"rutina",name:"Rutina legendaria",tier:1,status:"done",pct:100},
+    {id:"monje2",name:"Modo monje",tier:2,status:"progress",pct:60},
+    {id:"antifragil",name:"Antifrágil",tier:3,status:"locked",pct:0},
+  ]},
+  {id:"ment",name:"Mentalidad",icon:"ti-sparkles",color:"#C9A84C",nodes:[
+    {id:"invoca",name:"Invoca tus deseos",tier:1,status:"done",pct:100},
+    {id:"monje3",name:"Modo monje espiritual",tier:2,status:"progress",pct:45},
+    {id:"identidad",name:"Identidad heroica",tier:3,status:"locked",pct:0},
+  ]},
+  {id:"love",name:"Relaciones",icon:"ti-heart",color:"#C0729E",nodes:[
+    {id:"heroeslove",name:"Heroes Love",tier:1,status:"progress",pct:20},
+    {id:"amistad",name:"Amistad de hierro",tier:2,status:"locked",pct:0},
+  ]},
+];
+
+const COURSES=[
+  {id:"invoca",title:"Invoca tus deseos",lessons:8,hours:"3h 20m",pct:100,icon:"ti-sparkles",color:"#C9A84C"},
+  {id:"ultraprod",title:"Ultraproductividad",lessons:12,hours:"5h 40m",pct:70,icon:"ti-brain",color:"#7B5EA7"},
+  {id:"hybrid",title:"Hybrid Athlete",lessons:16,hours:"8h 10m",pct:55,icon:"ti-barbell",color:"#C0392B"},
+  {id:"monje",title:"Modo monje",lessons:10,hours:"4h 30m",pct:45,icon:"ti-flame",color:"#E67E22"},
+  {id:"social",title:"Social Natural",lessons:9,hours:"3h 50m",pct:100,icon:"ti-users",color:"#2BBFA0"},
+  {id:"love",title:"Heroes Love",lessons:11,hours:"5h 00m",pct:20,icon:"ti-heart",color:"#C0729E"},
+  {id:"salud",title:"Salud Mental",lessons:8,hours:"3h 10m",pct:100,icon:"ti-brain",color:"#7B5EA7"},
+  {id:"english",title:"Heroes English",lessons:24,hours:"12h 00m",pct:25,icon:"ti-language",color:"#C9A84C"},
+  {id:"liderazgo",title:"Liderazgo épico",lessons:10,hours:"4h 20m",pct:0,icon:"ti-crown",color:"#C0392B",locked:true},
+  {id:"estudiante",title:"Estudiante de 10",lessons:9,hours:"3h 30m",pct:40,icon:"ti-book",color:"#7B5EA7"},
+  {id:"skin",title:"Skin Legendaria",lessons:7,hours:"2h 45m",pct:30,icon:"ti-star",color:"#2BBFA0"},
+  {id:"antifragil",title:"Antifrágil",lessons:8,hours:"3h 00m",pct:0,icon:"ti-shield",color:"#E67E22",locked:true},
+];
+
+const RESOURCES=[
+  {id:1,title:"El código del guerrero",type:"Libro",branch:"Disciplina",pct:40,icon:"ti-book",color:"#7B5EA7"},
+  {id:2,title:"Deep work · masterclass",type:"Video",branch:"Mente",pct:100,icon:"ti-player-play",color:"#C0392B"},
+  {id:3,title:"Protocolo morning routine",type:"Guía PDF",branch:"Disciplina",pct:0,icon:"ti-file-text",color:"#E67E22"},
+  {id:4,title:"Meditación del héroe",type:"Audio",branch:"Mentalidad",pct:0,icon:"ti-headphones",color:"#2BBFA0"},
+  {id:5,title:"Estoicismo aplicado",type:"Libro",branch:"Mentalidad",pct:0,icon:"ti-book",color:"#C9A84C"},
+  {id:6,title:"Nutrición legendaria",type:"Guía PDF",branch:"Cuerpo",pct:60,icon:"ti-file-text",color:"#C0392B"},
+  {id:7,title:"Comunicación de poder",type:"Video",branch:"Social",pct:100,icon:"ti-player-play",color:"#2BBFA0"},
+  {id:8,title:"Mentalidad de campeón",type:"Audio",branch:"Mentalidad",pct:75,icon:"ti-headphones",color:"#7B5EA7"},
+];
+
+// ── XP Toast ──────────────────────────────────────────────
+function XPToast({amount,x,y,onDone}){
+  useEffect(()=>{const t=setTimeout(onDone,1400);return()=>clearTimeout(t);},[]);
+  return <div className="xp-toast" style={{left:x-40,top:y-20}}>+{amount} XP ⚡</div>;
+}
+
+// ── Rank Up Modal ─────────────────────────────────────────
+function RankUpModal({from,to,onClose}){
+  const c=rankColor(to);
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div className="card rank-anim" style={{maxWidth:300,width:"100%",textAlign:"center",border:`1.5px solid ${c}`}}>
+        <div style={{fontSize:56,marginBottom:12}}>🏆</div>
+        <div style={{fontFamily:"var(--font-title)",fontSize:12,color:"var(--text3)",marginBottom:4}}>¡Nuevo rango desbloqueado!</div>
+        <div style={{fontFamily:"var(--font-title)",fontSize:28,color:c,marginBottom:6}}>{to}</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:20}}>Superaste el rango <b style={{color:"var(--text)"}}>{from}</b>.<br/>Nuevos contenidos disponibles.</div>
+        <button onClick={onClose} className="btn btn-gold" style={{width:"100%"}}>¡A conquistar! <i className="ti ti-arrow-right"/></button>
+      </div>
+    </div>
+  );
+}
+
+// ── NAV ───────────────────────────────────────────────────
+function Nav(){
+  const {screen,setScreen}=useApp();
+  const tabs=[
+    {id:"home",icon:"ti-home",label:"Inicio"},
+    {id:"tree",icon:"ti-topology-star",label:"Árbol"},
+    {id:"school",icon:"ti-school",label:"Escuela"},
+    {id:"library",icon:"ti-books",label:"Librería"},
+    {id:"community",icon:"ti-users",label:"Comunidad"},
+    {id:"profile",icon:"ti-user",label:"Perfil"},
+  ];
+  return(
+    <nav style={{position:"fixed",bottom:0,left:0,right:0,background:"rgba(18,18,26,0.97)",backdropFilter:"blur(12px)",borderTop:"0.5px solid var(--border2)",display:"flex",zIndex:100}}>
+      {tabs.map(t=>(
+        <button key={t.id} onClick={()=>setScreen(t.id)}
+          style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"10px 4px 10px",opacity:screen===t.id?1:0.38,transition:"opacity .2s"}}>
+          <i className={`ti ${t.icon}`} style={{fontSize:22,color:screen===t.id?"var(--gold)":"var(--text)"}}/>
+          <span style={{fontSize:9,fontWeight:screen===t.id?500:400,color:screen===t.id?"var(--gold)":"var(--text2)",letterSpacing:"0.04em",textTransform:"uppercase"}}>{t.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+// ── AUTH ──────────────────────────────────────────────────
+function Auth(){
+  const {handleLogin}=useApp();
+  const [mode,setMode]=useState("login");
+  const [name,setName]=useState("");
+  const [email,setEmail]=useState("");
+  const [pass,setPass]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+
+  const submit=async e=>{
+    e.preventDefault();setError("");setLoading(true);
+    try{
+      const path=mode==="login"?"/api/auth/login":"/api/auth/register";
+      const body=mode==="login"?{email,password:pass}:{name,email,password:pass};
+      const d=await api("POST",path,body);
+      handleLogin(d.token,d.user);
+    }catch(err){setError(err.message);}
+    finally{setLoading(false);}
+  };
+
+  return(
+    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{marginBottom:32,textAlign:"center"}}>
+        <i className="ti ti-topology-star" style={{fontSize:52,color:"var(--gold)",display:"block",marginBottom:12}}/>
+        <h1 style={{fontFamily:"var(--font-title)",fontSize:30,color:"var(--gold)",letterSpacing:"0.1em"}}>HEROPATH</h1>
+        <p style={{fontSize:13,color:"var(--text3)",marginTop:4}}>Tu camino legendario comienza aquí</p>
+      </div>
+      <div className="card" style={{width:"100%",maxWidth:380}}>
+        <div style={{display:"flex",gap:6,marginBottom:20}}>
+          {["login","register"].map(m=>(
+            <button key={m} onClick={()=>{setMode(m);setError("");}}
+              style={{flex:1,padding:"8px",borderRadius:8,border:`0.5px solid ${mode===m?"var(--gold)":"var(--border)"}`,
+                background:mode===m?"rgba(201,168,76,0.1)":"transparent",
+                color:mode===m?"var(--gold)":"var(--text2)",fontSize:12,fontWeight:mode===m?500:400,transition:"all .2s"}}>
+              {m==="login"?"Iniciar sesión":"Crear cuenta"}
+            </button>
+          ))}
+        </div>
+        <form onSubmit={submit} style={{display:"flex",flexDirection:"column",gap:12}}>
+          {mode==="register"&&<input className="input" placeholder="Tu nombre de héroe" value={name} onChange={e=>setName(e.target.value)} required minLength={2}/>}
+          <input className="input" type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required/>
+          <input className="input" type="password" placeholder="Contraseña (mín. 6 caracteres)" value={pass} onChange={e=>setPass(e.target.value)} required minLength={6}/>
+          {error&&<div className="err"><i className="ti ti-alert-circle"/> {error}</div>}
+          <button type="submit" className="btn btn-gold" style={{width:"100%",marginTop:4}} disabled={loading}>
+            {loading
+              ?<span className="spinner" style={{width:18,height:18}}/>
+              :mode==="login"?"Entrar al reino":"Forjar mi legado"}
+          </button>
+        </form>
+        <div style={{marginTop:14,padding:"9px 12px",background:"var(--bg3)",borderRadius:8,fontSize:11,color:"var(--text3)"}}>
+          <i className="ti ti-server"/> Backend debe estar en <code style={{color:"var(--gold)"}}>localhost:3001</code>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── HOME ──────────────────────────────────────────────────
+function Home(){
+  const {user,token,missions,setMissions,refreshUser,addToast}=useApp();
+
+  // FIX: cargar misiones solo si no están cargadas aún
+  useEffect(()=>{
+    if(missions!==null) return; // ya cargadas, no recargar
+    api("GET","/api/missions/today",null,token)
+      .then(d=>setMissions(d))
+      .catch(()=>setMissions({missions:[],completedCount:0,bonusXP:75}));
+  },[token]); // eslint-disable-line
+
+  const completeMission=async(id,e)=>{
+    // FIX: verificar si ya está completada localmente antes de llamar al backend
+    const m=missions?.missions?.find(x=>x.id===id);
+    if(!m||m.done) return;
+
+    const rect=e.currentTarget.getBoundingClientRect();
+    // FIX: actualizar estado local INMEDIATAMENTE para que persista al cambiar pantalla
+    setMissions(prev=>{
+      if(!prev)return prev;
+      const updated=prev.missions.map(x=>x.id===id?{...x,done:true}:x);
+      const completedCount=updated.filter(x=>x.done).length;
+      return {...prev,missions:updated,completedCount};
+    });
+
+    try{
+      const res=await api("PATCH",`/api/missions/${id}/complete`,null,token);
+      addToast(res.earned+(res.bonusEarned||0),rect.left+rect.width/2,rect.top);
+      await refreshUser();
+    }catch(err){
+      // Si ya estaba completada en el servidor, no revertimos el estado local
+      if(!err.message.includes("ya completada")){
+        // revertir solo si es otro error
+        setMissions(prev=>{
+          if(!prev)return prev;
+          const reverted=prev.missions.map(x=>x.id===id?{...x,done:false}:x);
+          const completedCount=reverted.filter(x=>x.done).length;
+          return {...prev,missions:reverted,completedCount};
+        });
+      }
+    }
+  };
+
+  const [postText,setPostText]=useState("");
+  const [posting,setPosting]=useState(false);
+  const [postOk,setPostOk]=useState(false);
+
+  const submitPost=async()=>{
+    if(!postText.trim()||postText.length<5)return;
+    setPosting(true);
+    try{
+      await api("POST","/api/posts",{text:postText},token);
+      setPostText("");
+      setPostOk(true);
+      setTimeout(()=>setPostOk(false),3000);
+    }catch(err){alert(err.message);}
+    finally{setPosting(false);}
+  };
+
+  const days=["L","M","X","J","V","S","D"];
+  const streak=user?.streak||0;
+  const xpPct=user?Math.min(100,Math.round((user.xp/(user.nextRankXP||1000))*100)):0;
+  const completedCount=missions?.completedCount||0;
+  const missionList=missions?.missions||[];
+
+  return(
+    <div className="fade-in" style={{padding:"20px 16px 110px"}}>
+      {/* Hero banner */}
+      <div className="card" style={{marginBottom:14,background:"linear-gradient(135deg,var(--bg2),#1A1228)",border:"0.5px solid rgba(123,94,167,0.4)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+          <div style={{width:48,height:48,borderRadius:"50%",background:"var(--purple-dark)",border:"1.5px solid var(--purple)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-title)",fontSize:16,color:"var(--purple-light)",flexShrink:0}}>
+            {(user?.name||"H").slice(0,2).toUpperCase()}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontFamily:"var(--font-title)",fontSize:14,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.name||"Héroe"}</div>
+            <span className="pill" style={{background:"rgba(123,94,167,0.2)",borderColor:"var(--purple)",color:"var(--purple-light)",marginTop:2}}>
+              <i className={`ti ${rankIcon(user?.rank)}`} style={{fontSize:10}}/> {user?.rank||"Recluta"}
+            </span>
+          </div>
+          <div style={{textAlign:"right",flexShrink:0}}>
+            <div style={{fontFamily:"var(--font-title)",fontSize:22,color:"var(--gold)"}}>{(user?.xp||0).toLocaleString()}</div>
+            <div style={{fontSize:10,color:"var(--text3)"}}>XP total</div>
+          </div>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:4}}>
+          <span style={{color:"var(--text2)"}}>→ {user?.nextRank||"Guerrero"}</span>
+          <span style={{color:"var(--gold)"}}>{xpPct}%</span>
+        </div>
+        <div className="prog-bar"><div className="prog-fill" style={{width:`${xpPct}%`,background:"var(--gold)"}}/></div>
+        <div style={{fontSize:10,color:"var(--text3)",marginTop:3}}>
+          {user?.nextRankXP?`${((user.nextRankXP||0)-(user.xp||0)).toLocaleString()} XP para ${user?.nextRank}`:"Rango máximo alcanzado"}
+        </div>
+      </div>
+
+      {/* Streak */}
+      <div className="card" style={{marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <h3 style={{fontSize:13,color:"var(--gold)"}}>Racha activa</h3>
+          <span style={{fontSize:13,color:"var(--orange)",fontWeight:500}}><i className="ti ti-flame"/> {streak} días</span>
+        </div>
+        <div style={{display:"flex",gap:5}}>
+          {days.map((d,i)=>{
+            const active=i<Math.min(streak,7);
+            return(
+              <div key={i} style={{flex:1,textAlign:"center"}}>
+                <div style={{height:28,borderRadius:6,background:active?"rgba(201,168,76,0.2)":"var(--bg3)",border:`0.5px solid ${active?"var(--gold)":"var(--border)"}`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:3}}>
+                  {active&&<i className="ti ti-check" style={{fontSize:12,color:"var(--gold)"}}/>}
+                </div>
+                <span style={{fontSize:9,color:active?"var(--gold)":"var(--text3)"}}>{d}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Missions - FIX: estado persiste en contexto global */}
+      <div className="card" style={{marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <h3 style={{fontSize:13,color:"var(--gold)"}}>Misiones de hoy</h3>
+          <span style={{fontSize:11,color:"var(--text2)"}}>{completedCount}/{missionList.length}</span>
+        </div>
+        {missions===null
+          ?<div style={{textAlign:"center",padding:16}}><div className="spinner" style={{width:24,height:24,margin:"auto"}}/></div>
+          :<>
+            <div className="prog-bar" style={{marginBottom:10}}>
+              <div className="prog-fill" style={{width:`${missionList.length?Math.round(completedCount/missionList.length*100):0}%`,background:completedCount===missionList.length&&missionList.length>0?"var(--teal)":"var(--purple)"}}/>
+            </div>
+            {completedCount===missionList.length&&missionList.length>0&&(
+              <div className="ok" style={{marginBottom:10,fontSize:11}}>¡Bono de +75 XP desbloqueado! Todas las misiones completadas 🎉</div>
+            )}
+            {missionList.map(m=>(
+              <div key={m.id} className="mission-row" style={{opacity:m.done?0.5:1}}>
+                <div style={{width:32,height:32,borderRadius:8,background:m.done?"rgba(43,191,160,0.12)":"rgba(255,255,255,0.04)",border:`0.5px solid ${m.done?"var(--teal)":"var(--border)"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <i className={`ti ${m.icon||"ti-target"}`} style={{fontSize:15,color:m.done?"var(--teal)":"var(--text2)"}}/>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:500,color:"var(--text)",textDecoration:m.done?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title}</div>
+                  <div style={{fontSize:10,color:"var(--text3)"}}>{m.branch} · +{m.xp} XP</div>
+                </div>
+                {/* FIX: el click completa la misión y actualiza contexto global */}
+                <div
+                  onClick={e=>!m.done&&completeMission(m.id,e)}
+                  className="mission-check"
+                  style={{width:22,height:22,border:`0.5px solid ${m.done?"var(--teal)":"var(--border2)"}`,background:m.done?"var(--teal)":"transparent",cursor:m.done?"default":"pointer"}}>
+                  {m.done&&<i className="ti ti-check" style={{fontSize:12,color:"#0A0A0F"}}/>}
+                </div>
+              </div>
+            ))}
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:8,fontSize:11,color:"var(--text3)"}}>
+              <span>Bono al completar las 3</span>
+              <span style={{color:"var(--gold)"}}>+75 XP</span>
+            </div>
+          </>
+        }
+      </div>
+
+      {/* Stats rápidos */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}}>
+        {[{n:"#"+(user?.pos||"—"),l:"Ranking",c:"var(--purple-light)"},{n:streak+"d",l:"Racha",c:"var(--orange)"},{n:String(user?.xp||0),l:"XP total",c:"var(--gold)"}].map((s,i)=>(
+          <div key={i} className="card-sm" style={{textAlign:"center"}}>
+            <div style={{fontFamily:"var(--font-title)",fontSize:17,color:s.c}}>{s.n}</div>
+            <div style={{fontSize:10,color:"var(--text3)",marginTop:2}}>{s.l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Comparte tu avance - FIX: restaurado */}
+      <div className="card">
+        <h3 style={{fontSize:13,color:"var(--gold)",marginBottom:10}}>Comparte tu avance</h3>
+        <textarea
+          className="input"
+          rows={3}
+          placeholder="¿Qué lograste hoy? Inspira a la comunidad Heroes..."
+          value={postText}
+          onChange={e=>setPostText(e.target.value)}
+          style={{resize:"none",marginBottom:8,lineHeight:1.6}}
+        />
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <span style={{fontSize:11,color:postText.length>5?"var(--teal)":"var(--text3)"}}>{postText.length} / 280</span>
+          {postText.length>280&&<span style={{fontSize:11,color:"var(--red)"}}>Demasiado largo</span>}
+        </div>
+        {postOk&&<div className="ok" style={{marginBottom:8}}>¡Publicado en el feed de la comunidad! 🔥</div>}
+        <button
+          onClick={submitPost}
+          disabled={posting||postText.trim().length<5||postText.length>280}
+          className="btn btn-gold"
+          style={{width:"100%",opacity:postText.trim().length>=5&&postText.length<=280?1:0.4}}>
+          {posting
+            ?<><span className="spinner" style={{width:16,height:16}}/> Publicando...</>
+            :<><i className="ti ti-send"/> Publicar en comunidad</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── TREE ──────────────────────────────────────────────────
+function Tree(){
+  const [sel,setSel]=useState(null);
+  const node=sel?BRANCHES.flatMap(b=>b.nodes).find(n=>n.id===sel):null;
+  const branch=sel?BRANCHES.find(b=>b.nodes.some(n=>n.id===sel)):null;
+  return(
+    <div className="fade-in" style={{padding:"20px 16px 110px"}}>
+      <h2 style={{fontSize:18,color:"var(--gold)",marginBottom:4}}>Árbol de habilidades</h2>
+      <p style={{fontSize:12,color:"var(--text2)",marginBottom:16}}>Toca un nodo para ver detalles · verde = dominado</p>
+      {BRANCHES.map(b=>(
+        <div key={b.id} className="card" style={{marginBottom:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <div style={{width:26,height:26,borderRadius:7,background:`${b.color}18`,border:`0.5px solid ${b.color}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <i className={`ti ${b.icon}`} style={{fontSize:13,color:b.color}}/>
+            </div>
+            <span style={{fontFamily:"var(--font-title)",fontSize:12,color:"var(--text)"}}>{b.name}</span>
+          </div>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+            {b.nodes.map(n=>(
+              <button key={n.id} onClick={()=>n.status!=="locked"&&setSel(sel===n.id?null:n.id)}
+                style={{flex:"1 1 70px",minWidth:64,padding:"7px 5px",borderRadius:6,
+                  background:n.status==="done"?"rgba(43,191,160,0.1)":n.status==="progress"?`${b.color}10`:"var(--bg3)",
+                  border:`0.5px solid ${n.status==="done"?"var(--teal)":n.status==="progress"?b.color:"var(--border)"}`,
+                  opacity:n.status==="locked"?0.38:1,cursor:n.status==="locked"?"not-allowed":"pointer",
+                  outline:sel===n.id?`1.5px solid ${b.color}`:"none",transition:"all .2s"}}>
+                <div style={{fontSize:10,fontWeight:500,color:n.status==="done"?"var(--teal)":n.status==="progress"?b.color:"var(--text3)",textAlign:"center",marginBottom:3,lineHeight:1.3}}>{n.name}</div>
+                <div className="prog-bar"><div className="prog-fill" style={{width:`${n.pct}%`,background:n.status==="done"?"var(--teal)":b.color}}/></div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      {node&&branch&&(
+        <div className="card fade-in" style={{border:`0.5px solid ${branch.color}`,background:`${branch.color}06`,marginTop:4}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+            <div style={{width:30,height:30,borderRadius:8,background:`${branch.color}20`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <i className={`ti ${branch.icon}`} style={{fontSize:15,color:branch.color}}/>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontFamily:"var(--font-title)",fontSize:13,color:"var(--text)"}}>{node.name}</div>
+              <div style={{fontSize:11,color:"var(--text2)"}}>Tier {node.tier} · {branch.name}</div>
+            </div>
+            <span className="pill" style={{background:node.status==="done"?"rgba(43,191,160,0.15)":"rgba(255,255,255,0.05)",borderColor:node.status==="done"?"var(--teal)":branch.color,color:node.status==="done"?"var(--teal)":branch.color}}>
+              {node.status==="done"?"✦ Dominado":node.status==="progress"?`${node.pct}% completo`:"🔒 Bloqueado"}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── SCHOOL ────────────────────────────────────────────────
+function School(){
+  const {token,addToast,refreshUser}=useApp();
+  const [filter,setFilter]=useState("todos");
+  // FIX: estado local de cursos para poder marcar progreso sin reload
+  const [completing,setCompleting]=useState(null);
+  const [courseXP,setCourseXP]=useState({}); // lleva cuántas veces se completó cada curso
+
+  const filtered=filter==="todos"?COURSES
+    :filter==="progreso"?COURSES.filter(c=>c.pct>0&&c.pct<100)
+    :filter==="completo"?COURSES.filter(c=>c.pct===100)
+    :COURSES.filter(c=>c.pct===0&&!c.locked);
+
+  // FIX: función corregida que realmente llama al backend y da feedback
+  const startLesson=async(course,e)=>{
+    if(course.locked||completing===course.id) return;
+    setCompleting(course.id);
+    const rect=e.currentTarget.getBoundingClientRect();
+    try{
+      const lessonId=`${course.id}_lesson_${Date.now()}`;
+      const res=await api("POST","/api/progress/lesson",{courseId:course.id,lessonId,lessonNumber:1},token);
+      addToast(res.earned,rect.left+rect.width/2,rect.top);
+      setCourseXP(prev=>({...prev,[course.id]:(prev[course.id]||0)+res.earned}));
+      await refreshUser();
+    }catch(err){
+      if(err.message.includes("ya completada")){
+        // lección ya registrada, intentar con nuevo ID (siempre funciona por el timestamp)
+      }
+    }finally{
+      setCompleting(null);
+    }
+  };
+
+  return(
+    <div className="fade-in" style={{padding:"20px 16px 110px"}}>
+      <h2 style={{fontSize:18,color:"var(--gold)",marginBottom:4}}>Escuela</h2>
+      <p style={{fontSize:12,color:"var(--text2)",marginBottom:12}}>{COURSES.length} cursos · cada lección suma +50 XP</p>
+
+      {/* Curso destacado */}
+      <div className="card" style={{marginBottom:16,background:"linear-gradient(135deg,var(--bg2),#1A1228)",border:"0.5px solid rgba(123,94,167,0.4)"}}>
+        <div style={{fontSize:10,color:"var(--purple-light)",fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Continuando ahora</div>
+        <div style={{fontFamily:"var(--font-title)",fontSize:14,color:"var(--text)",marginBottom:2}}>Ultraproductividad · Lección 7</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Deep work · bloques de concentración</div>
+        <div className="prog-bar" style={{marginBottom:12}}><div className="prog-fill" style={{width:"70%",background:"var(--purple)"}}/></div>
+        <a href="leccion.html" className="btn btn-gold" style={{fontSize:12,padding:"8px 16px",textDecoration:"none",display:"inline-flex"}}>
+          <i className="ti ti-player-play"/> Abrir lección completa
+        </a>
+      </div>
+
+      {/* Filtros */}
+      <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
+        {[["todos","Todos"],["progreso","En curso"],["completo","Completados"],["sin","Sin iniciar"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setFilter(v)} className="pill"
+            style={{flexShrink:0,background:filter===v?"var(--purple)":"transparent",
+              borderColor:filter===v?"var(--purple)":"var(--border2)",
+              color:filter===v?"white":"var(--text2)",cursor:"pointer"}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* Lista de cursos - FIX: botón funcional */}
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {filtered.map(c=>{
+          const xpGanada=courseXP[c.id]||0;
+          return(
+            <div key={c.id} className="card-sm" style={{display:"flex",gap:10,alignItems:"center",opacity:c.locked?0.4:1}}>
+              <div style={{width:36,height:36,borderRadius:8,background:`${c.color}10`,border:`0.5px solid ${c.pct===100?"var(--teal)":c.locked?"var(--border)":c.color}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <i className={`ti ${c.pct===100?"ti-check":c.locked?"ti-lock":c.icon}`} style={{fontSize:16,color:c.pct===100?"var(--teal)":c.locked?"var(--text3)":c.color}}/>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:500,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.title}</div>
+                <div style={{fontSize:10,color:"var(--text3)"}}>{c.lessons} lecciones · {c.hours}{xpGanada>0?` · +${xpGanada} XP ganados`:""}</div>
+                {c.pct>0&&!c.locked&&<div className="prog-bar" style={{marginTop:4}}><div className="prog-fill" style={{width:`${c.pct}%`,background:c.pct===100?"var(--teal)":c.color}}/></div>}
+              </div>
+              {/* FIX: botón con onClick funcional */}
+              <button
+                onClick={e=>startLesson(c,e)}
+                disabled={c.locked||completing===c.id}
+                style={{flexShrink:0,padding:"4px 10px",borderRadius:20,border:`0.5px solid ${c.locked?"var(--border)":c.color}`,
+                  background:c.locked?"transparent":`${c.color}15`,
+                  color:c.locked?"var(--text3)":c.color,
+                  fontSize:11,cursor:c.locked?"not-allowed":"pointer",
+                  opacity:c.locked?0.4:1,transition:"all .2s",display:"flex",alignItems:"center",gap:4}}>
+                {completing===c.id
+                  ?<span className="spinner" style={{width:12,height:12}}/>
+                  :c.locked?"Bloqueado"
+                  :c.pct===0?"Iniciar +50 XP"
+                  :c.pct===100?"Repasar +50 XP"
+                  :"Continuar +50 XP"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── LIBRARY ───────────────────────────────────────────────
+function Library(){
+  const {token,addToast,refreshUser}=useApp();
+  const [filter,setFilter]=useState("Todos");
+  const [reading,setReading]=useState(null);
+  const filtered=filter==="Todos"?RESOURCES:RESOURCES.filter(r=>r.type===filter);
+
+  const markRead=async(r,e)=>{
+    if(reading===r.id) return;
+    setReading(r.id);
+    const rect=e.currentTarget.getBoundingClientRect();
+    try{
+      const res=await api("POST","/api/xp/add",{source:"resource_read"},token);
+      addToast(res.earned,rect.left+rect.width/2,rect.top);
+      await refreshUser();
+    }catch{}
+    finally{setReading(null);}
+  };
+
+  return(
+    <div className="fade-in" style={{padding:"20px 16px 110px"}}>
+      <h2 style={{fontSize:18,color:"var(--gold)",marginBottom:4}}>Librería</h2>
+      <p style={{fontSize:12,color:"var(--text2)",marginBottom:12}}>Cada recurso completado suma +25 XP</p>
+      <div style={{display:"flex",gap:6,marginBottom:14,overflowX:"auto",paddingBottom:4}}>
+        {["Todos","Libro","Video","Guía PDF","Audio"].map(t=>(
+          <button key={t} onClick={()=>setFilter(t)} className="pill"
+            style={{flexShrink:0,background:filter===t?"var(--gold)":"transparent",borderColor:filter===t?"var(--gold)":"var(--border2)",color:filter===t?"var(--bg)":"var(--text2)",cursor:"pointer"}}>
+            {t}
+          </button>
+        ))}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {filtered.map(r=>(
+          <div key={r.id} className="card-sm" style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+            <div style={{width:36,height:36,borderRadius:8,background:`${r.color}10`,border:`0.5px solid ${r.color}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}>
+              <i className={`ti ${r.icon}`} style={{fontSize:16,color:r.color}}/>
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:500,color:"var(--text)",marginBottom:1}}>{r.title}</div>
+              <div style={{fontSize:11,color:"var(--text3)"}}>{r.type} · {r.branch}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:5}}>
+                <div className="prog-bar" style={{flex:1}}><div className="prog-fill" style={{width:`${r.pct}%`,background:r.pct===100?"var(--teal)":r.color}}/></div>
+                <span style={{fontSize:10,color:"var(--text3)",flexShrink:0}}>{r.pct}%</span>
+              </div>
+            </div>
+            <button onClick={e=>markRead(r,e)} disabled={reading===r.id}
+              style={{flexShrink:0,padding:"4px 10px",borderRadius:20,border:`0.5px solid ${r.color}`,background:`${r.color}12`,color:r.color,fontSize:11,cursor:"pointer",marginTop:2,display:"flex",alignItems:"center",gap:4}}>
+              {reading===r.id?<span className="spinner" style={{width:12,height:12}}/>:r.pct===100?"Releer":"Marcar leído"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── COMMUNITY ─────────────────────────────────────────────
+function Community(){
+  const {token,user}=useApp();
+  const [tab,setTab]=useState("feed");
+  const [posts,setPosts]=useState([]);
+  const [lb,setLb]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const [liked,setLiked]=useState({});
+
+  useEffect(()=>{
+    setLoading(true);
+    const load=tab==="feed"
+      ?api("GET","/api/posts",null,token).then(d=>setPosts(d))
+      :api("GET","/api/leaderboard?limit=20",null,token).then(d=>setLb(d));
+    load.catch(()=>{}).finally(()=>setLoading(false));
+  },[tab,token]);
+
+  const toggleLike=async id=>{
+    try{
+      const res=await api("POST",`/api/posts/${id}/like`,null,token);
+      setLiked(prev=>({...prev,[id]:res.liked}));
+      setPosts(prev=>prev.map(p=>p._id===id?{...p,likes:Array(res.likeCount).fill("")}:p));
+    }catch{}
+  };
+
+  const ago=ts=>{
+    const d=Date.now()-new Date(ts).getTime();
+    if(d<60000) return "ahora";
+    if(d<3600000) return `${Math.floor(d/60000)}m`;
+    if(d<86400000) return `${Math.floor(d/3600000)}h`;
+    return `${Math.floor(d/86400000)}d`;
+  };
+
+  return(
+    <div className="fade-in" style={{padding:"20px 16px 110px"}}>
+      <h2 style={{fontSize:18,color:"var(--gold)",marginBottom:12}}>Comunidad</h2>
+      <div style={{display:"flex",gap:6,marginBottom:16}}>
+        {[["feed","Feed"],["ranking","Ranking"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setTab(v)} className="pill"
+            style={{background:tab===v?"var(--gold)":"transparent",borderColor:tab===v?"var(--gold)":"var(--border2)",color:tab===v?"var(--bg)":"var(--text2)",cursor:"pointer"}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {loading&&<div style={{textAlign:"center",padding:40}}><div className="spinner" style={{width:28,height:28,margin:"auto"}}/></div>}
+
+      {!loading&&tab==="feed"&&(
+        posts.length===0
+          ?<div style={{textAlign:"center",color:"var(--text3)",padding:40}}>
+            <i className="ti ti-message-circle" style={{fontSize:40,display:"block",marginBottom:8}}/>
+            Nadie ha publicado aún.<br/>¡Ve a Inicio y comparte tu avance!
+          </div>
+          :posts.map(p=>{
+            const c=rankColor(p.userRank||"Recluta");
+            const isMe=p.userId===user?.id;
+            return(
+              <div key={p._id} className="card" style={{marginBottom:10,border:isMe?"0.5px solid rgba(201,168,76,0.3)":"0.5px solid var(--border)"}}>
+                <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+                  <div style={{width:30,height:30,borderRadius:"50%",background:`${c}22`,border:`0.5px solid ${c}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:500,color:c,flexShrink:0}}>{(p.userName||"H").slice(0,2).toUpperCase()}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <span style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>{p.userName}</span>
+                    {isMe&&<span style={{fontSize:10,color:"var(--gold)",marginLeft:6}}>· tú</span>}
+                    <span className="pill" style={{marginLeft:6,fontSize:9,background:`${c}15`,borderColor:c,color:c}}>{p.userRank||"Recluta"}</span>
+                  </div>
+                  <span style={{fontSize:10,color:"var(--text3)"}}>{ago(p.createdAt)}</span>
+                </div>
+                <p style={{fontSize:12,color:"var(--text2)",lineHeight:1.7,marginBottom:10}}>{p.text}</p>
+                <div style={{display:"flex",gap:14}}>
+                  <button onClick={()=>toggleLike(p._id)} style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:liked[p._id]?"var(--orange)":"var(--text3)"}}>
+                    <i className="ti ti-flame" style={{fontSize:15}}/>{p.likes?.length||0}
+                  </button>
+                  <button style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--text3)"}}>
+                    <i className="ti ti-message-circle" style={{fontSize:15}}/>{p.comments?.length||0}
+                  </button>
+                </div>
+              </div>
+            );
+          })
+      )}
+
+      {!loading&&tab==="ranking"&&lb&&(
+        <div>
+          {lb.myEntry&&(
+            <div style={{marginBottom:12,padding:"10px 14px",background:"rgba(123,94,167,0.1)",border:"0.5px solid rgba(123,94,167,0.4)",borderRadius:10}}>
+              <div style={{fontSize:11,color:"var(--purple-light)",marginBottom:4}}>Tu posición esta semana</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontFamily:"var(--font-title)",fontSize:24,color:"var(--purple-light)"}}>#{lb.myEntry.pos}</span>
+                <span style={{fontSize:12,color:"var(--text2)"}}>de {lb.total} héroes</span>
+                <span style={{fontFamily:"var(--font-title)",fontSize:14,color:"var(--gold)"}}>{(lb.myEntry.xp||0).toLocaleString()} XP</span>
+              </div>
+            </div>
+          )}
+          {(lb.leaderboard||[]).map((u,i)=>{
+            const c=rankColor(u.rank);
+            return(
+              <div key={u.id} className="card-sm" style={{display:"flex",gap:8,alignItems:"center",marginBottom:6,background:u.isMe?"rgba(201,168,76,0.06)":"var(--bg3)",border:u.isMe?"0.5px solid rgba(201,168,76,0.3)":"0.5px solid var(--border)"}}>
+                <div style={{width:22,textAlign:"center",fontFamily:"var(--font-title)",fontSize:12,color:i===0?"var(--gold)":i===1?"#B4B2A9":i===2?"var(--red)":"var(--text3)",flexShrink:0}}>{u.pos}</div>
+                <div style={{width:28,height:28,borderRadius:"50%",background:`${c}22`,border:`0.5px solid ${c}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:500,color:c,flexShrink:0}}>{(u.name||"H").slice(0,2).toUpperCase()}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:500,color:u.isMe?"var(--gold)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.name}{u.isMe?" (tú)":""}</div>
+                  <div style={{fontSize:10,color:"var(--text3)"}}>{u.rank} · racha {u.streak}d</div>
+                </div>
+                <div style={{fontSize:12,fontWeight:500,color:"var(--purple-light)",flexShrink:0}}>{(u.xp||0).toLocaleString()}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── PROFILE ───────────────────────────────────────────────
+function Profile(){
+  const {user,token,handleLogout}=useApp();
+  const [badges,setBadges]=useState([]);
+  const [tab,setTab]=useState("stats");
+  const [loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    api("GET","/api/badges",null,token).then(d=>setBadges(d)).catch(()=>{}).finally(()=>setLoading(false));
+  },[token]);
+
+  const earned=badges.filter(b=>b.earned);
+  const locked=badges.filter(b=>!b.earned);
+
+  return(
+    <div className="fade-in" style={{padding:"20px 16px 110px"}}>
+      <div className="card" style={{marginBottom:16,textAlign:"center",background:"linear-gradient(135deg,#1A1228,#12101A)",border:"0.5px solid rgba(123,94,167,0.4)"}}>
+        <div style={{width:64,height:64,borderRadius:"50%",background:"var(--purple-dark)",border:"2px solid var(--purple)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px",fontFamily:"var(--font-title)",fontSize:20,color:"var(--purple-light)"}}>
+          {(user?.name||"H").slice(0,2).toUpperCase()}
+        </div>
+        <h2 style={{fontFamily:"var(--font-title)",fontSize:16,color:"var(--text)",marginBottom:4}}>{user?.name}</h2>
+        <div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:12}}>
+          <span className="pill" style={{background:"rgba(123,94,167,0.2)",borderColor:"var(--purple)",color:"var(--purple-light)"}}>
+            <i className={`ti ${rankIcon(user?.rank)}`} style={{fontSize:11}}/> {user?.rank}
+          </span>
+          <span className="pill" style={{background:"rgba(230,126,34,0.15)",borderColor:"var(--orange)",color:"var(--orange)"}}>
+            <i className="ti ti-flame" style={{fontSize:11}}/> {user?.streak||0} días
+          </span>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+          {[{n:(user?.xp||0).toLocaleString(),l:"XP total"},{n:`${user?.streak||0}d`,l:"Racha actual"},{n:earned.length,l:"Badges"}].map((s,i)=>(
+            <div key={i}>
+              <div style={{fontFamily:"var(--font-title)",fontSize:18,color:"var(--gold)"}}>{s.n}</div>
+              <div style={{fontSize:10,color:"var(--text3)"}}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{display:"flex",gap:6,marginBottom:14}}>
+        {[["stats","Estadísticas"],["badges","Badges"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setTab(v)} className="pill"
+            style={{flex:1,justifyContent:"center",background:tab===v?"var(--gold)":"transparent",borderColor:tab===v?"var(--gold)":"var(--border2)",color:tab===v?"var(--bg)":"var(--text2)",cursor:"pointer"}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {tab==="stats"&&(
+        <div className="card">
+          <h3 style={{fontSize:12,color:"var(--gold)",marginBottom:12}}>Progreso por rama</h3>
+          {BRANCHES.map(b=>{
+            const done=b.nodes.filter(n=>n.status==="done").length;
+            const pct=Math.round(done/b.nodes.length*100);
+            return(
+              <div key={b.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                <div style={{width:20,height:20,borderRadius:5,background:`${b.color}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <i className={`ti ${b.icon}`} style={{fontSize:11,color:b.color}}/>
+                </div>
+                <span style={{fontSize:11,color:"var(--text2)",width:70,flexShrink:0}}>{b.name}</span>
+                <div className="prog-bar" style={{flex:1}}><div className="prog-fill" style={{width:`${pct}%`,background:b.color}}/></div>
+                <span style={{fontSize:10,color:b.color,width:28,textAlign:"right",flexShrink:0}}>{pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {tab==="badges"&&(
+        <div>
+          {loading?<div style={{textAlign:"center",padding:20}}><div className="spinner" style={{width:24,height:24,margin:"auto"}}/></div>:(
+            <>
+              <div style={{fontSize:11,color:"var(--gold)",marginBottom:8,fontWeight:500}}>Ganados · {earned.length} badges</div>
+              {earned.length===0&&<div style={{fontSize:12,color:"var(--text3)",marginBottom:12}}>Aún no has ganado ningún badge. ¡Completa misiones!</div>}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:16}}>
+                {earned.map(b=>(
+                  <div key={b.id} title={b.desc} style={{textAlign:"center",padding:"8px 4px",borderRadius:8,background:"rgba(201,168,76,0.06)",border:"0.5px solid rgba(201,168,76,0.25)"}}>
+                    <i className={`ti ${b.icon}`} style={{fontSize:22,color:"var(--gold)",display:"block",marginBottom:3}}/>
+                    <div style={{fontSize:9,color:"var(--gold)",lineHeight:1.2}}>{b.name}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:11,color:"var(--text3)",marginBottom:8,fontWeight:500}}>Por desbloquear · {locked.length}</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+                {locked.map(b=>(
+                  <div key={b.id} title={b.desc} style={{textAlign:"center",padding:"8px 4px",borderRadius:8,background:"var(--bg3)",border:"0.5px solid var(--border)",opacity:0.4}}>
+                    <i className="ti ti-lock" style={{fontSize:22,color:"var(--text3)",display:"block",marginBottom:3}}/>
+                    <div style={{fontSize:9,color:"var(--text3)",lineHeight:1.2}}>{b.name}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      <button onClick={handleLogout} className="btn btn-ghost" style={{width:"100%",marginTop:20,borderColor:"rgba(192,57,43,0.3)",color:"var(--red)"}}>
+        <i className="ti ti-logout"/> Cerrar sesión
+      </button>
+    </div>
+  );
+}
+
+// ── APP ROOT ──────────────────────────────────────────────
+function App(){
+  const [token,setToken]=useState(()=>localStorage.getItem("hp_token")||null);
+  const [user,setUser]=useState(null);
+  const [screen,setScreen]=useState("home");
+  const [loading,setLoading]=useState(!!token);
+  const [rankUp,setRankUp]=useState(null);
+  const [toasts,setToasts]=useState([]);
+
+  // FIX: misiones en contexto global para que persistan entre pantallas
+  const [missions,setMissions]=useState(null);
+
+  const prevRankRef=useRef(null);
+
+  const refreshUser=useCallback(async()=>{
+    if(!token) return;
+    try{
+      const fresh=await api("GET","/api/auth/me",null,token);
+      if(prevRankRef.current&&fresh.rank!==prevRankRef.current){
+        setRankUp({from:prevRankRef.current,to:fresh.rank});
+      }
+      prevRankRef.current=fresh.rank;
+      setUser(fresh);
+    }catch{}
+  },[token]);
+
+  useEffect(()=>{
+    if(!token){setLoading(false);return;}
+    api("GET","/api/auth/me",null,token)
+      .then(d=>{
+        setUser(d);
+        prevRankRef.current=d.rank;
+      })
+      .catch(()=>{localStorage.removeItem("hp_token");setToken(null);})
+      .finally(()=>setLoading(false));
+  },[token]);
+
+  const handleLogin=(tok,u)=>{
+    localStorage.setItem("hp_token",tok);
+    setToken(tok);setUser(u);
+    prevRankRef.current=u.rank||"Recluta";
+    setMissions(null); // reset missions on new login
+  };
+
+  const handleLogout=()=>{
+    localStorage.removeItem("hp_token");
+    setToken(null);setUser(null);setScreen("home");setMissions(null);
+  };
+
+  const addToast=(amount,x,y)=>{
+    const id=Date.now();
+    setToasts(prev=>[...prev,{id,amount,x,y}]);
+  };
+
+  const removeToast=id=>setToasts(prev=>prev.filter(t=>t.id!==id));
+
+  const ctx={token,user,setUser,screen,setScreen,missions,setMissions,refreshUser,handleLogin,handleLogout,addToast};
+
+  if(loading) return(
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
+      <i className="ti ti-topology-star" style={{fontSize:52,color:"var(--gold)"}}/>
+      <div className="spinner" style={{width:32,height:32}}/>
+    </div>
+  );
+
+  if(!token||!user) return <Ctx.Provider value={ctx}><Auth/></Ctx.Provider>;
+
+  const screens={home:<Home/>,tree:<Tree/>,school:<School/>,library:<Library/>,community:<Community/>,profile:<Profile/>};
+
+  return(
+    <Ctx.Provider value={ctx}>
+      {/* Toasts globales */}
+      {toasts.map(t=><XPToast key={t.id} amount={t.amount} x={t.x} y={t.y} onDone={()=>removeToast(t.id)}/>)}
+
+      {rankUp&&<RankUpModal from={rankUp.from} to={rankUp.to} onClose={()=>setRankUp(null)}/>}
+
+      <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh"}}>
+        <header style={{position:"sticky",top:0,zIndex:50,background:"rgba(10,10,15,0.95)",backdropFilter:"blur(12px)",borderBottom:"0.5px solid var(--border)",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <i className="ti ti-topology-star" style={{fontSize:20,color:"var(--gold)"}}/>
+            <span style={{fontFamily:"var(--font-title)",fontSize:15,color:"var(--gold)",letterSpacing:"0.08em"}}>HeroPath</span>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:12,color:"var(--orange)",fontWeight:500}}><i className="ti ti-flame"/> {user.streak||0}</span>
+            <span style={{fontSize:12,color:"var(--purple-light)",fontWeight:500}}><i className="ti ti-star"/> {(user.xp||0).toLocaleString()} XP</span>
+          </div>
+        </header>
+        <main>{screens[screen]||<Home/>}</main>
+        <Nav/>
+      </div>
+    </Ctx.Provider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

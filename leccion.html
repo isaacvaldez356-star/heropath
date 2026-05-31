@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HeroPath — Lección</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+:root{
+  --gold:#C9A84C;--gold-light:#E8C97A;--gold-dark:#8A6A28;
+  --purple:#7B5EA7;--purple-light:#A07FCC;--purple-dark:#4A3270;
+  --teal:#2BBFA0;--teal-dark:#1A7A68;
+  --bg:#0A0A0F;--bg2:#12121A;--bg3:#1A1A26;--bg4:#222233;
+  --border:rgba(201,168,76,0.15);--border2:rgba(201,168,76,0.3);
+  --text:#E8E0D0;--text2:#A09880;--text3:#665E50;
+  --red:#C0392B;--green:#27AE60;--orange:#E67E22;
+  --font-title:'Cinzel',serif;--font-body:'Inter',sans-serif;
+  --r:8px;--r2:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:14px;line-height:1.6;min-height:100vh;}
+h1,h2,h3{font-family:var(--font-title);font-weight:500;letter-spacing:0.05em;}
+button{cursor:pointer;border:none;background:none;font-family:var(--font-body);color:var(--text);}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:var(--bg2);}
+::-webkit-scrollbar-thumb{background:var(--gold-dark);border-radius:2px;}
+.card{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:16px;}
+.card-sm{background:var(--bg3);border:0.5px solid var(--border);border-radius:var(--r);padding:10px 12px;}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 9px;border-radius:20px;border:0.5px solid;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:var(--r);font-size:13px;font-weight:500;transition:all .2s;cursor:pointer;border:0.5px solid var(--border2);}
+.btn-gold{background:var(--gold);color:#0A0A0F;border-color:var(--gold);}
+.btn-gold:hover{background:var(--gold-light);}
+.btn-ghost{background:transparent;color:var(--text2);}
+.btn-ghost:hover{color:var(--text);border-color:var(--border2);}
+.btn-teal{background:var(--teal);color:#0A0A0F;border-color:var(--teal);}
+.btn-teal:hover{background:#34D6B5;}
+.btn-purple{background:var(--purple);color:white;border-color:var(--purple);}
+.btn-purple:hover{background:var(--purple-light);}
+.prog-bar{height:4px;border-radius:2px;background:var(--bg4);overflow:hidden;}
+.prog-fill{height:100%;border-radius:2px;transition:width .6s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+.fade-in{animation:fadeIn .35s ease forwards;}
+@keyframes slideUp{from{opacity:0;transform:translateY(30px);}to{opacity:1;transform:translateY(0);}}
+.slide-up{animation:slideUp .4s ease forwards;}
+@keyframes pop{0%{transform:scale(1);}50%{transform:scale(1.15);}100%{transform:scale(1);}}
+.pop{animation:pop .3s ease;}
+@keyframes xpFloat{0%{opacity:1;transform:translateY(0);}100%{opacity:0;transform:translateY(-40px);}}
+.xp-float{animation:xpFloat .9s ease forwards;}
+@keyframes celebrate{0%{transform:scale(0.8);opacity:0;}60%{transform:scale(1.05);}100%{transform:scale(1);opacity:1;}}
+.celebrate{animation:celebrate .5s ease forwards;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.spin{animation:spin 1s linear infinite;}
+@keyframes glow{0%,100%{box-shadow:0 0 8px rgba(201,168,76,0.3);}50%{box-shadow:0 0 20px rgba(201,168,76,0.6);}}
+.glow{animation:glow 2s ease-in-out infinite;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback}=React;
+
+const COURSE={
+  id:"ultraprod",
+  title:"Ultraproductividad",
+  icon:"ti-brain",
+  color:"#7B5EA7",
+  totalLessons:12,
+  currentLesson:7,
+  lessons:[
+    {n:1,title:"Introducción al sistema",done:true},
+    {n:2,title:"El mito de la multitarea",done:true},
+    {n:3,title:"Bloques de tiempo",done:true},
+    {n:4,title:"La ley de Parkinson",done:true},
+    {n:5,title:"Elimina distracciones",done:true},
+    {n:6,title:"El sistema de prioridades",done:true},
+    {n:7,title:"Deep work",done:false,current:true},
+    {n:8,title:"La sesión perfecta",done:false},
+    {n:9,title:"Revisión semanal",done:false},
+    {n:10,title:"Automatización inteligente",done:false},
+    {n:11,title:"Hábitos de alto rendimiento",done:false},
+    {n:12,title:"El sistema definitivo",done:false},
+  ],
+};
+
+const LESSON={
+  number:7,
+  title:"Deep Work",
+  subtitle:"La habilidad más valiosa del siglo XXI",
+  xp:50,
+  duration:"18 min",
+  content:[
+    {
+      type:"intro",
+      heading:"¿Qué es el Deep Work?",
+      text:"Cal Newport define el Deep Work como actividad profesional realizada en un estado de concentración sin distracciones que lleva tus capacidades cognitivas al límite. Este esfuerzo crea nuevo valor, mejora tus habilidades y es difícil de replicar.",
+    },
+    {
+      type:"concept",
+      heading:"Los dos tipos de trabajo",
+      items:[
+        {icon:"ti-brain",label:"Deep Work",desc:"Concentración total. Sin notificaciones. Produce resultados excepcionales. Difícil de hacer."},
+        {icon:"ti-messages",label:"Shallow Work",desc:"Emails, reuniones, tareas administrativas. Fácil de hacer pero de poco valor a largo plazo."},
+      ],
+    },
+    {
+      type:"quote",
+      text:"La habilidad de realizar deep work se está volviendo cada vez más rara al mismo tiempo que se vuelve cada vez más valiosa.",
+      author:"Cal Newport",
+    },
+    {
+      type:"rules",
+      heading:"Las 4 reglas del Deep Work",
+      rules:[
+        {n:1,title:"Trabaja profundamente",desc:"Crea rituales y rutinas que minimicen la fricción para entrar en estado de concentración."},
+        {n:2,title:"Abraza el aburrimiento",desc:"Entrena tu mente para resistir las distracciones. No revises el teléfono en cada momento libre."},
+        {n:3,title:"Abandona las redes sociales",desc:"Evalúa cada herramienta digital: ¿sus beneficios superan sus costos para tus objetivos?"},
+        {n:4,title:"Drena lo superficial",desc:"Identifica y reduce las actividades de bajo valor que consumen tu tiempo y energía."},
+      ],
+    },
+    {
+      type:"tip",
+      heading:"Tu protocolo de deep work",
+      text:"Bloquea 90 minutos en tu calendario mañana. Pon el teléfono en otra habitación. Cierra todas las pestañas excepto una. Solo trabaja en una cosa. Verás la diferencia.",
+    },
+  ],
+  challenge:{
+    title:"Reto de aplicación",
+    desc:"Realiza una sesión de Deep Work de 90 minutos esta semana. Sin teléfono, sin redes sociales, sin interrupciones. Al terminar, escribe qué lograste.",
+    xp:100,
+    steps:[
+      "Elige una tarea importante que requiera concentración",
+      "Bloquea 90 minutos en tu calendario",
+      "Pon el teléfono en modo avión o en otra habitación",
+      "Trabaja sin interrupciones los 90 minutos completos",
+      "Al terminar, escribe qué lograste en ese tiempo",
+    ],
+  },
+  exam:{
+    xp:150,
+    questions:[
+      {
+        q:"¿Qué define Cal Newport como Deep Work?",
+        opts:[
+          "Trabajar muchas horas al día sin descanso",
+          "Actividad cognitiva intensa sin distracciones que lleva tus capacidades al límite",
+          "Usar múltiples herramientas digitales al mismo tiempo",
+          "Trabajar desde casa en un entorno tranquilo",
+        ],
+        correct:1,
+        exp:"El Deep Work es trabajo cognitivo de alta concentración que produce valor real y es difícil de replicar.",
+      },
+      {
+        q:"¿Cuál es la diferencia principal entre Deep Work y Shallow Work?",
+        opts:[
+          "El Deep Work se hace por la mañana y el Shallow por la tarde",
+          "El Deep Work requiere herramientas digitales, el Shallow no",
+          "El Deep Work exige concentración total y produce resultados excepcionales; el Shallow es fácil pero de poco valor",
+          "No hay diferencia real entre ambos",
+        ],
+        correct:2,
+        exp:"El Shallow Work incluye emails y reuniones — fácil pero de bajo valor. El Deep Work crea resultados difíciles de replicar.",
+      },
+      {
+        q:"¿Cuánto tiempo mínimo se recomienda para una sesión de Deep Work?",
+        opts:[
+          "15 minutos intensos",
+          "30 minutos con descansos frecuentes",
+          "90 minutos sin interrupciones",
+          "4 horas continuas sin parar",
+        ],
+        correct:2,
+        exp:"90 minutos es el tiempo óptimo que permite entrar en estado de flujo y producir trabajo de alta calidad.",
+      },
+      {
+        q:"Según la regla 'Abraza el aburrimiento', ¿qué debes entrenar?",
+        opts:[
+          "Tu cuerpo para aguantar más horas trabajando",
+          "Tu mente para resistir las distracciones y tolerar el aburrimiento",
+          "Tu capacidad de hacer múltiples tareas a la vez",
+          "Tu velocidad de escritura y procesamiento",
+        ],
+        correct:1,
+        exp:"Cada vez que resistes revisar el teléfono en un momento libre, entrenas tu cerebro para concentrarse más.",
+      },
+      {
+        q:"¿Cuál de estas acciones NO corresponde al Deep Work?",
+        opts:[
+          "Bloquear tiempo en el calendario para una sola tarea",
+          "Poner el teléfono en otra habitación",
+          "Responder emails mientras trabajas en un proyecto importante",
+          "Cerrar todas las pestañas excepto la necesaria",
+        ],
+        correct:2,
+        exp:"Responder emails es Shallow Work. Combinarlo con trabajo profundo arruina el estado de concentración.",
+      },
+    ],
+  },
+};
+
+// ── XP Toast ──────────────────────────────────────────
+function XPToast({amount,onDone}){
+  useEffect(()=>{const t=setTimeout(onDone,900);return()=>clearTimeout(t);},[]);
+  return(
+    <div className="xp-float" style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:999,
+      background:"var(--gold)",color:"#0A0A0F",fontFamily:"var(--font-title)",fontSize:22,fontWeight:700,
+      padding:"12px 28px",borderRadius:40,pointerEvents:"none",whiteSpace:"nowrap"}}>
+      +{amount} XP
+    </div>
+  );
+}
+
+// ── Progress Header ───────────────────────────────────
+function ProgressHeader({phase,phaseIdx,totalPhases,lessonNum,totalLessons,onBack}){
+  const phases=["Lección","Reto","Examen"];
+  const overallPct=Math.round(((phaseIdx+(phase==="lesson"?0.5:phase==="challenge"?1.5:2.5))/totalPhases)*100);
+  return(
+    <header style={{background:"rgba(10,10,15,0.95)",backdropFilter:"blur(12px)",borderBottom:"0.5px solid var(--border)",padding:"12px 16px",position:"sticky",top:0,zIndex:50}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+        <button onClick={onBack} className="btn btn-ghost" style={{padding:"6px 8px",fontSize:12}}>
+          <i className="ti ti-arrow-left" style={{fontSize:16}}/>
+        </button>
+        <div style={{flex:1}}>
+          <div style={{fontSize:11,color:"var(--text3)",marginBottom:1}}>Lección {lessonNum} de {totalLessons} · Ultraproductividad</div>
+          <div style={{fontFamily:"var(--font-title)",fontSize:13,color:"var(--text)"}}>{LESSON.title}</div>
+        </div>
+        <div style={{display:"flex",gap:5}}>
+          {phases.map((p,i)=>(
+            <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+              <div style={{width:24,height:24,borderRadius:"50%",
+                background:phaseIdx>i?"var(--teal)":phaseIdx===i?"var(--purple)":"var(--bg3)",
+                border:`0.5px solid ${phaseIdx>i?"var(--teal)":phaseIdx===i?"var(--purple)":"var(--border)"}`,
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,
+                color:phaseIdx>i||phaseIdx===i?"white":"var(--text3)"}}>
+                {phaseIdx>i?<i className="ti ti-check" style={{fontSize:11}}/>:i+1}
+              </div>
+              <span style={{fontSize:8,color:phaseIdx===i?"var(--purple-light)":"var(--text3)",whiteSpace:"nowrap"}}>{p}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="prog-bar">
+        <div className="prog-fill" style={{width:`${overallPct}%`,background:"var(--purple)"}}/>
+      </div>
+    </header>
+  );
+}
+
+// ── Lesson Phase ──────────────────────────────────────
+function LessonPhase({onComplete}){
+  const [sectionIdx,setSectionIdx]=useState(0);
+  const [toast,setToast]=useState(false);
+  const section=LESSON.content[sectionIdx];
+  const isLast=sectionIdx===LESSON.content.length-1;
+  const pct=Math.round((sectionIdx+1)/LESSON.content.length*100);
+
+  const next=()=>{
+    if(isLast){setToast(true);}
+    else setSectionIdx(i=>i+1);
+  };
+  const prev=()=>sectionIdx>0&&setSectionIdx(i=>i-1);
+
+  return(
+    <div style={{padding:"20px 16px 120px"}}>
+      {toast&&<XPToast amount={LESSON.xp} onDone={onComplete}/>}
+
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div style={{display:"flex",gap:4}}>
+          {LESSON.content.map((_,i)=>(
+            <div key={i} style={{height:3,borderRadius:2,transition:"all .3s",
+              background:i<=sectionIdx?"var(--purple)":"var(--bg4)",
+              width:i===sectionIdx?28:12}}/>
+          ))}
+        </div>
+        <span style={{fontSize:11,color:"var(--text3)"}}>{sectionIdx+1} / {LESSON.content.length}</span>
+      </div>
+
+      <div className="fade-in" key={sectionIdx}>
+        {section.type==="intro"&&(
+          <div>
+            <div style={{width:56,height:56,borderRadius:14,background:"rgba(123,94,167,0.2)",border:"0.5px solid var(--purple)",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16}}>
+              <i className="ti ti-brain" style={{fontSize:28,color:"var(--purple-light)"}}/>
+            </div>
+            <h2 style={{fontSize:20,color:"var(--gold)",marginBottom:8,lineHeight:1.3}}>{section.heading}</h2>
+            <div style={{width:40,height:2,background:"var(--gold-dark)",borderRadius:1,marginBottom:16}}/>
+            <p style={{fontSize:14,color:"var(--text2)",lineHeight:1.8}}>{section.text}</p>
+            <div style={{marginTop:20,padding:"12px 16px",background:"rgba(123,94,167,0.08)",border:"0.5px solid rgba(123,94,167,0.3)",borderRadius:var(--r2)}}>
+              <div style={{fontSize:11,color:"var(--purple-light)",fontWeight:500,marginBottom:4}}>En esta lección aprenderás:</div>
+              {["Qué es el Deep Work y por qué importa","La diferencia con el Shallow Work","Las 4 reglas para aplicarlo","Tu protocolo de acción"].map((t,i)=>(
+                <div key={i} style={{display:"flex",gap:8,fontSize:12,color:"var(--text2)",marginTop:6}}>
+                  <i className="ti ti-check" style={{fontSize:13,color:"var(--teal)",flexShrink:0,marginTop:2}}/>
+                  {t}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {section.type==="concept"&&(
+          <div>
+            <h2 style={{fontSize:18,color:"var(--gold)",marginBottom:16}}>{section.heading}</h2>
+            {section.items.map((item,i)=>(
+              <div key={i} className="card" style={{marginBottom:12,border:`0.5px solid ${i===0?"var(--purple)":"var(--border)"}`,background:i===0?"rgba(123,94,167,0.1)":"var(--bg2)"}}>
+                <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                  <div style={{width:36,height:36,borderRadius:9,background:i===0?"rgba(123,94,167,0.2)":"rgba(255,255,255,0.04)",border:`0.5px solid ${i===0?"var(--purple)":"var(--border)"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <i className={`ti ${item.icon}`} style={{fontSize:18,color:i===0?"var(--purple-light)":"var(--text3)"}}/>
+                  </div>
+                  <div>
+                    <div style={{fontFamily:"var(--font-title)",fontSize:14,color:i===0?"var(--purple-light)":"var(--text2)",marginBottom:4}}>{item.label}</div>
+                    <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.6}}>{item.desc}</div>
+                  </div>
+                </div>
+                {i===0&&<div style={{marginTop:10,display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{height:3,flex:1,borderRadius:2,background:"var(--bg4)",overflow:"hidden"}}>
+                    <div style={{width:"85%",height:"100%",background:"var(--purple)",borderRadius:2}}/>
+                  </div>
+                  <span style={{fontSize:10,color:"var(--purple-light)"}}>Alto valor</span>
+                </div>}
+              </div>
+            ))}
+            <div style={{padding:"10px 14px",background:"rgba(201,168,76,0.08)",border:"0.5px solid rgba(201,168,76,0.25)",borderRadius:var(--r)}}>
+              <span style={{fontSize:12,color:"var(--text2)"}}>La mayoría de trabajadores pasan el 80% de su tiempo en Shallow Work. Los mejores invierten ese ratio.</span>
+            </div>
+          </div>
+        )}
+
+        {section.type==="quote"&&(
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:260,textAlign:"center"}}>
+            <i className="ti ti-quote" style={{fontSize:48,color:"var(--gold-dark)",marginBottom:20}}/>
+            <blockquote style={{fontFamily:"var(--font-title)",fontSize:18,color:"var(--text)",lineHeight:1.6,marginBottom:16,maxWidth:340}}>
+              "{section.text}"
+            </blockquote>
+            <div style={{width:40,height:1,background:"var(--gold-dark)",marginBottom:12}}/>
+            <div style={{fontSize:13,color:"var(--gold)"}}>{section.author}</div>
+          </div>
+        )}
+
+        {section.type==="rules"&&(
+          <div>
+            <h2 style={{fontSize:18,color:"var(--gold)",marginBottom:16}}>{section.heading}</h2>
+            {section.rules.map((r,i)=>(
+              <div key={i} style={{display:"flex",gap:12,marginBottom:14,padding:"12px 14px",background:"var(--bg2)",border:"0.5px solid var(--border)",borderRadius:var(--r)}}>
+                <div style={{width:28,height:28,borderRadius:"50%",background:"rgba(201,168,76,0.15)",border:"0.5px solid var(--gold-dark)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-title)",fontSize:13,color:"var(--gold)",flexShrink:0}}>{r.n}</div>
+                <div>
+                  <div style={{fontSize:13,fontWeight:500,color:"var(--text)",marginBottom:3}}>{r.title}</div>
+                  <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.5}}>{r.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {section.type==="tip"&&(
+          <div>
+            <div style={{textAlign:"center",marginBottom:20}}>
+              <div style={{width:56,height:56,borderRadius:14,background:"rgba(43,191,160,0.15)",border:"0.5px solid var(--teal)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}>
+                <i className="ti ti-bulb" style={{fontSize:28,color:"var(--teal)"}}/>
+              </div>
+              <h2 style={{fontSize:18,color:"var(--teal)"}}>{section.heading}</h2>
+            </div>
+            <div style={{padding:"16px",background:"rgba(43,191,160,0.08)",border:"0.5px solid rgba(43,191,160,0.3)",borderRadius:var(--r2),marginBottom:16}}>
+              <p style={{fontSize:14,color:"var(--text2)",lineHeight:1.8}}>{section.text}</p>
+            </div>
+            <div style={{padding:"12px 14px",background:"var(--bg2)",border:"0.5px solid var(--border)",borderRadius:var(--r)}}>
+              <div style={{fontSize:11,color:"var(--gold)",fontWeight:500,marginBottom:8}}>Resumen de la lección</div>
+              {["Deep Work = concentración sin distracciones","Produce resultados excepcionales","4 reglas para aplicarlo","90 min mínimo por sesión"].map((t,i)=>(
+                <div key={i} style={{display:"flex",gap:6,fontSize:12,color:"var(--text2)",marginBottom:4}}>
+                  <i className="ti ti-check" style={{fontSize:12,color:"var(--teal)",flexShrink:0,marginTop:2}}/>
+                  {t}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{position:"fixed",bottom:0,left:0,right:0,background:"rgba(10,10,15,0.96)",backdropFilter:"blur(12px)",borderTop:"0.5px solid var(--border)",padding:"14px 16px",display:"flex",gap:10,maxWidth:480,margin:"0 auto"}}>
+        {sectionIdx>0&&(
+          <button onClick={prev} className="btn btn-ghost" style={{flex:0,padding:"10px 14px"}}>
+            <i className="ti ti-arrow-left" style={{fontSize:16}}/>
+          </button>
+        )}
+        <button onClick={next} className="btn btn-gold" style={{flex:1,fontSize:13}}>
+          {isLast?<><i className="ti ti-check"/> Completar lección</>:<>Siguiente <i className="ti ti-arrow-right"/></>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Challenge Phase ────────────────────────────────────
+function ChallengePhase({onComplete}){
+  const [checked,setChecked]=useState(Array(LESSON.challenge.steps.length).fill(false));
+  const [reported,setReported]=useState("");
+  const [submitted,setSubmitted]=useState(false);
+  const [toast,setToast]=useState(false);
+  const allChecked=checked.every(Boolean);
+  const canSubmit=allChecked&&reported.trim().length>10;
+
+  const submit=()=>{
+    if(!canSubmit)return;
+    setSubmitted(true);
+    setToast(true);
+  };
+
+  if(submitted&&!toast)return null;
+
+  return(
+    <div style={{padding:"20px 16px 120px"}}>
+      {toast&&<XPToast amount={LESSON.challenge.xp} onDone={()=>{setToast(false);onComplete();}}/>}
+
+      <div style={{marginBottom:20}}>
+        <span className="pill" style={{background:"rgba(230,126,34,0.15)",borderColor:"var(--orange)",color:"var(--orange)",marginBottom:10,display:"inline-flex"}}>
+          <i className="ti ti-target" style={{fontSize:12}}/> Reto de aplicación · +{LESSON.challenge.xp} XP
+        </span>
+        <h2 style={{fontFamily:"var(--font-title)",fontSize:20,color:"var(--gold)",marginBottom:8,lineHeight:1.3}}>{LESSON.challenge.title}</h2>
+        <p style={{fontSize:13,color:"var(--text2)",lineHeight:1.7}}>{LESSON.challenge.desc}</p>
+      </div>
+
+      <div className="card" style={{marginBottom:16,border:"0.5px solid rgba(230,126,34,0.3)",background:"rgba(230,126,34,0.05)"}}>
+        <div style={{fontSize:12,color:"var(--orange)",fontWeight:500,marginBottom:12}}>Pasos del reto</div>
+        {LESSON.challenge.steps.map((step,i)=>(
+          <div key={i} onClick={()=>setChecked(prev=>prev.map((c,j)=>j===i?!c:c))}
+            style={{display:"flex",gap:10,alignItems:"flex-start",padding:"10px 0",borderBottom:i<LESSON.challenge.steps.length-1?"0.5px solid var(--border)":"none",cursor:"pointer"}}>
+            <div style={{width:22,height:22,borderRadius:6,border:`0.5px solid ${checked[i]?"var(--teal)":"var(--border2)"}`,background:checked[i]?"var(--teal)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1,transition:"all .2s"}}>
+              {checked[i]&&<i className="ti ti-check" style={{fontSize:13,color:"#0A0A0F"}}/>}
+            </div>
+            <div style={{display:"flex",gap:8,flex:1,alignItems:"flex-start"}}>
+              <span style={{fontSize:11,color:"var(--orange)",fontWeight:500,flexShrink:0,marginTop:1}}>{i+1}.</span>
+              <span style={{fontSize:12,color:checked[i]?"var(--text3)":"var(--text2)",textDecoration:checked[i]?"line-through":"none",lineHeight:1.5,transition:"all .2s"}}>{step}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="card" style={{marginBottom:16}}>
+        <div style={{fontSize:12,color:"var(--purple-light)",fontWeight:500,marginBottom:8}}>¿Qué lograste en tu sesión?</div>
+        <textarea
+          value={reported}
+          onChange={e=>setReported(e.target.value)}
+          placeholder="Escribe brevemente qué lograste en tu sesión de Deep Work de 90 minutos..."
+          style={{width:"100%",background:"var(--bg3)",border:"0.5px solid var(--border2)",borderRadius:var(--r),padding:"10px 12px",color:"var(--text)",fontSize:12,lineHeight:1.6,resize:"none",height:100,outline:"none",fontFamily:"var(--font-body)"}}
+        />
+        <div style={{fontSize:10,color:reported.length>10?"var(--teal)":"var(--text3)",marginTop:4,textAlign:"right"}}>{reported.length} / mín. 10 caracteres</div>
+      </div>
+
+      <div style={{padding:"10px 14px",background:"rgba(43,191,160,0.06)",border:"0.5px solid rgba(43,191,160,0.2)",borderRadius:var(--r),marginBottom:80}}>
+        <div style={{fontSize:11,color:"var(--teal)",fontWeight:500,marginBottom:4}}>Después de completar este reto:</div>
+        <div style={{fontSize:12,color:"var(--text2)"}}>Tu reporte quedará guardado en tu historial. La comunidad podrá ver tus victorias.</div>
+      </div>
+
+      <div style={{position:"fixed",bottom:0,left:0,right:0,background:"rgba(10,10,15,0.96)",backdropFilter:"blur(12px)",borderTop:"0.5px solid var(--border)",padding:"14px 16px",maxWidth:480,margin:"0 auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <span style={{fontSize:11,color:"var(--text2)"}}>{checked.filter(Boolean).length}/{LESSON.challenge.steps.length} pasos marcados</span>
+          {!allChecked&&<span style={{fontSize:11,color:"var(--text3)"}}>Completa todos los pasos</span>}
+          {allChecked&&reported.length<=10&&<span style={{fontSize:11,color:"var(--text3)"}}>Escribe tu resultado</span>}
+          {canSubmit&&<span style={{fontSize:11,color:"var(--teal)"}}>¡Listo para entregar!</span>}
+        </div>
+        <button onClick={submit} disabled={!canSubmit} className="btn btn-teal" style={{width:"100%",opacity:canSubmit?1:0.4}}>
+          <i className="ti ti-send"/> Entregar reto · +{LESSON.challenge.xp} XP
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Exam Phase ─────────────────────────────────────────
+function ExamPhase({onComplete}){
+  const [qIdx,setQIdx]=useState(0);
+  const [selected,setSelected]=useState(null);
+  const [answered,setAnswered]=useState(false);
+  const [results,setResults]=useState([]);
+  const [done,setDone]=useState(false);
+  const [toast,setToast]=useState(false);
+  const q=LESSON.exam.questions[qIdx];
+  const score=results.filter(Boolean).length;
+  const passed=score>=4;
+
+  const confirm=()=>{
+    if(selected===null)return;
+    const correct=selected===q.correct;
+    setAnswered(true);
+    const newResults=[...results,correct];
+    if(qIdx===LESSON.exam.questions.length-1){
+      setTimeout(()=>{setResults(newResults);setDone(true);if(newResults.filter(Boolean).length>=4)setToast(true);},900);
+    } else {
+      setTimeout(()=>{
+        setResults(newResults);
+        setQIdx(i=>i+1);
+        setSelected(null);
+        setAnswered(false);
+      },1200);
+    }
+  };
+
+  const retry=()=>{setQIdx(0);setSelected(null);setAnswered(false);setResults([]);setDone(false);};
+
+  if(done){
+    return(
+      <div style={{padding:"40px 16px",textAlign:"center",minHeight:"70vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+        {toast&&<XPToast amount={LESSON.exam.xp} onDone={()=>setToast(false)}/>}
+        <div className="celebrate" style={{marginBottom:24}}>
+          <div style={{width:80,height:80,borderRadius:"50%",background:passed?"rgba(43,191,160,0.15)":"rgba(192,57,43,0.15)",border:`2px solid ${passed?"var(--teal)":"var(--red)"}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}>
+            <i className={`ti ${passed?"ti-trophy":"ti-x"}`} style={{fontSize:36,color:passed?"var(--teal)":"var(--red)"}}/>
+          </div>
+          <h2 style={{fontFamily:"var(--font-title)",fontSize:22,color:passed?"var(--teal)":"var(--red)",marginBottom:8}}>
+            {passed?"¡Lección dominada!":"Sigue practicando"}
+          </h2>
+          <div style={{fontSize:40,fontFamily:"var(--font-title)",color:"var(--gold)",marginBottom:4}}>{score}/{LESSON.exam.questions.length}</div>
+          <div style={{fontSize:13,color:"var(--text2)",marginBottom:20}}>
+            {passed?"Superaste el mínimo de 4/5 preguntas":"Necesitas 4/5 para pasar. ¡Tú puedes!"}
+          </div>
+        </div>
+
+        {passed&&(
+          <div style={{width:"100%",padding:"14px 16px",background:"rgba(43,191,160,0.08)",border:"0.5px solid rgba(43,191,160,0.3)",borderRadius:var(--r2),marginBottom:20,textAlign:"left"}}>
+            <div style={{fontSize:12,color:"var(--teal)",fontWeight:500,marginBottom:8}}>Recompensas desbloqueadas</div>
+            {[{icon:"ti-star",label:`+${LESSON.exam.xp} XP por aprobar el examen`},{icon:"ti-check",label:"Lección 7 marcada como completada"},{icon:"ti-lock-open",label:"Lección 8 desbloqueada: La sesión perfecta"}].map((r,i)=>(
+              <div key={i} style={{display:"flex",gap:8,marginBottom:6,fontSize:12,color:"var(--text2)"}}>
+                <i className={`ti ${r.icon}`} style={{fontSize:14,color:"var(--teal)",flexShrink:0}}/>
+                {r.label}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{display:"flex",gap:10,width:"100%"}}>
+          {!passed&&<button onClick={retry} className="btn btn-ghost" style={{flex:1}}>
+            <i className="ti ti-refresh"/> Reintentar
+          </button>}
+          <button onClick={onComplete} className={`btn ${passed?"btn-gold":"btn-purple"}`} style={{flex:1}}>
+            {passed?"Siguiente lección":"Ver respuestas"}
+            <i className="ti ti-arrow-right"/>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return(
+    <div style={{padding:"20px 16px 120px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <span className="pill" style={{background:"rgba(201,168,76,0.12)",borderColor:"var(--gold-dark)",color:"var(--gold)"}}>
+          <i className="ti ti-help" style={{fontSize:11}}/> Pregunta {qIdx+1} de {LESSON.exam.questions.length}
+        </span>
+        <div style={{display:"flex",gap:4}}>
+          {LESSON.exam.questions.map((_,i)=>(
+            <div key={i} style={{width:8,height:8,borderRadius:"50%",background:i<results.length?(results[i]?"var(--teal)":"var(--red)"):i===qIdx?"var(--purple)":"var(--bg4)",transition:"all .3s"}}/>
+          ))}
+        </div>
+      </div>
+
+      <div className="card fade-in" key={qIdx} style={{marginBottom:16,border:"0.5px solid rgba(201,168,76,0.2)"}}>
+        <div style={{fontSize:11,color:"var(--gold)",fontWeight:500,marginBottom:10}}>Examen de dominio · +{LESSON.exam.xp} XP</div>
+        <p style={{fontSize:14,color:"var(--text)",lineHeight:1.7,fontWeight:500}}>{q.q}</p>
+      </div>
+
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+        {q.opts.map((opt,i)=>{
+          let bg="var(--bg2)",border="var(--border)",color="var(--text2)";
+          if(selected===i&&!answered){bg="rgba(123,94,167,0.15)";border="var(--purple)";color="var(--text)";}
+          if(answered){
+            if(i===q.correct){bg="rgba(43,191,160,0.12)";border="var(--teal)";color="var(--teal)";}
+            else if(i===selected&&selected!==q.correct){bg="rgba(192,57,43,0.12)";border="var(--red)";color="var(--red)";}
+          }
+          return(
+            <button key={i} onClick={()=>!answered&&setSelected(i)}
+              style={{textAlign:"left",padding:"12px 14px",borderRadius:var(--r),background:bg,border:`0.5px solid ${border}`,display:"flex",gap:10,alignItems:"center",transition:"all .2s",cursor:answered?"default":"pointer"}}>
+              <div style={{width:22,height:22,borderRadius:"50%",border:`0.5px solid ${border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:answered&&i===q.correct?"var(--teal)":answered&&i===selected&&selected!==q.correct?"var(--red)":selected===i?"var(--purple)":"transparent",transition:"all .2s"}}>
+                {answered&&i===q.correct&&<i className="ti ti-check" style={{fontSize:12,color:"white"}}/>}
+                {answered&&i===selected&&selected!==q.correct&&<i className="ti ti-x" style={{fontSize:12,color:"white"}}/>}
+                {!answered&&selected===i&&<div style={{width:8,height:8,borderRadius:"50%",background:"var(--purple)"}}/>}
+              </div>
+              <span style={{fontSize:13,color,lineHeight:1.5}}>{opt}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {answered&&(
+        <div className="fade-in" style={{padding:"12px 14px",background:selected===q.correct?"rgba(43,191,160,0.08)":"rgba(192,57,43,0.08)",border:`0.5px solid ${selected===q.correct?"rgba(43,191,160,0.3)":"rgba(192,57,43,0.3)"}`,borderRadius:var(--r),marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:500,color:selected===q.correct?"var(--teal)":"var(--red)",marginBottom:4}}>
+            {selected===q.correct?"¡Correcto!":"Respuesta incorrecta"}
+          </div>
+          <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.5}}>{q.exp}</div>
+        </div>
+      )}
+
+      <div style={{position:"fixed",bottom:0,left:0,right:0,background:"rgba(10,10,15,0.96)",backdropFilter:"blur(12px)",borderTop:"0.5px solid var(--border)",padding:"14px 16px",maxWidth:480,margin:"0 auto"}}>
+        <button onClick={confirm} disabled={selected===null||answered} className="btn btn-purple" style={{width:"100%",opacity:selected===null||answered?0.4:1}}>
+          {answered?"Procesando...":"Confirmar respuesta"}
+          {!answered&&<i className="ti ti-check"/>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Complete Screen ────────────────────────────────────
+function CompleteScreen({onRestart}){
+  const totalXP=LESSON.xp+LESSON.challenge.xp+LESSON.exam.xp;
+  return(
+    <div className="celebrate fade-in" style={{padding:"40px 16px",textAlign:"center",minHeight:"80vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+      <div className="glow" style={{width:90,height:90,borderRadius:"50%",background:"rgba(201,168,76,0.15)",border:"2px solid var(--gold)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
+        <i className="ti ti-trophy" style={{fontSize:42,color:"var(--gold)"}}/>
+      </div>
+      <h1 style={{fontFamily:"var(--font-title)",fontSize:24,color:"var(--gold)",marginBottom:8}}>¡Lección dominada!</h1>
+      <p style={{fontSize:13,color:"var(--text2)",marginBottom:24,maxWidth:280,lineHeight:1.7}}>Has completado las 3 fases de la lección. Deep Work desbloqueado en tu árbol.</p>
+
+      <div style={{width:"100%",background:"var(--bg2)",border:"0.5px solid var(--border2)",borderRadius:var(--r2),padding:"16px",marginBottom:16}}>
+        <div style={{fontSize:11,color:"var(--gold)",fontWeight:500,marginBottom:12}}>XP ganada esta lección</div>
+        {[{l:"Lección completada",x:LESSON.xp},{l:"Reto entregado",x:LESSON.challenge.xp},{l:"Examen aprobado",x:LESSON.exam.xp}].map((r,i)=>(
+          <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--text2)",padding:"6px 0",borderBottom:i<2?"0.5px solid var(--border)":"none"}}>
+            <span>{r.l}</span>
+            <span style={{color:"var(--purple-light)",fontWeight:500}}>+{r.x} XP</span>
+          </div>
+        ))}
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:14,color:"var(--gold)",fontFamily:"var(--font-title)",marginTop:10,paddingTop:10,borderTop:"0.5px solid var(--border2)"}}>
+          <span>Total</span>
+          <span>+{totalXP} XP</span>
+        </div>
+      </div>
+
+      <div style={{width:"100%",padding:"12px 14px",background:"rgba(43,191,160,0.08)",border:"0.5px solid rgba(43,191,160,0.25)",borderRadius:var(--r),marginBottom:24,textAlign:"left"}}>
+        <div style={{fontSize:11,color:"var(--teal)",fontWeight:500,marginBottom:6}}>Desbloqueado</div>
+        <div style={{fontSize:12,color:"var(--text2)",display:"flex",alignItems:"center",gap:6}}>
+          <i className="ti ti-lock-open" style={{fontSize:14,color:"var(--teal)"}}/> Lección 8 · La sesión perfecta
+        </div>
+      </div>
+
+      <div style={{display:"flex",gap:10,width:"100%"}}>
+        <button onClick={onRestart} className="btn btn-ghost" style={{flex:1}}>
+          <i className="ti ti-refresh"/> Reiniciar
+        </button>
+        <button className="btn btn-gold" style={{flex:1}}>
+          Siguiente lección <i className="ti ti-arrow-right"/>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ───────────────────────────────────────────
+function App(){
+  const [phase,setPhase]=useState("lesson");
+  const [lessonDone,setLessonDone]=useState(false);
+  const [challengeDone,setChallengeDone]=useState(false);
+  const [examDone,setExamDone]=useState(false);
+  const [complete,setComplete]=useState(false);
+  const [sidebarOpen,setSidebarOpen]=useState(false);
+
+  const phaseIdx=phase==="lesson"?0:phase==="challenge"?1:2;
+
+  const onLessonComplete=()=>{setLessonDone(true);setTimeout(()=>setPhase("challenge"),600);};
+  const onChallengeComplete=()=>{setChallengeDone(true);setTimeout(()=>setPhase("exam"),600);};
+  const onExamComplete=()=>{setExamDone(true);setTimeout(()=>setComplete(true),400);};
+  const restart=()=>{setPhase("lesson");setLessonDone(false);setChallengeDone(false);setExamDone(false);setComplete(false);};
+
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",position:"relative"}}>
+      {!complete&&(
+        <ProgressHeader
+          phase={phase} phaseIdx={phaseIdx} totalPhases={3}
+          lessonNum={LESSON.number} totalLessons={COURSE.totalLessons}
+          onBack={()=>window.history.back?.()}
+        />
+      )}
+
+      {/* Sidebar toggle */}
+      {!complete&&(
+        <button onClick={()=>setSidebarOpen(o=>!o)}
+          style={{position:"fixed",top:16,right:16,zIndex:200,width:32,height:32,borderRadius:8,background:"var(--bg3)",border:"0.5px solid var(--border2)",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--text2)"}}>
+          <i className="ti ti-list" style={{fontSize:16}}/>
+        </button>
+      )}
+
+      {/* Lesson list sidebar */}
+      {sidebarOpen&&(
+        <div onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:150,display:"flex",justifyContent:"flex-end"}}>
+          <div onClick={e=>e.stopPropagation()} className="slide-up" style={{width:260,background:"var(--bg2)",borderLeft:"0.5px solid var(--border2)",padding:"16px",overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
+            <div style={{fontFamily:"var(--font-title)",fontSize:13,color:"var(--gold)",marginBottom:12}}>Lecciones del curso</div>
+            {COURSE.lessons.map(l=>(
+              <div key={l.n} style={{display:"flex",gap:8,alignItems:"center",padding:"8px 10px",borderRadius:var(--r),background:l.current?"rgba(123,94,167,0.15)":"transparent",border:l.current?"0.5px solid var(--purple)":"0.5px solid transparent"}}>
+                <div style={{width:20,height:20,borderRadius:"50%",background:l.done?"var(--teal)":l.current?"var(--purple)":"var(--bg3)",border:`0.5px solid ${l.done?"var(--teal)":l.current?"var(--purple)":"var(--border)"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:9,color:l.done||l.current?"white":"var(--text3)"}}>
+                  {l.done?<i className="ti ti-check" style={{fontSize:10}}/>:l.n}
+                </div>
+                <span style={{fontSize:11,color:l.current?"var(--purple-light)":l.done?"var(--text2)":"var(--text3)",lineHeight:1.3}}>{l.title}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <main>
+        {complete?<CompleteScreen onRestart={restart}/>:
+         phase==="lesson"?<LessonPhase onComplete={onLessonComplete}/>:
+         phase==="challenge"?<ChallengePhase onComplete={onChallengeComplete}/>:
+         <ExamPhase onComplete={onExamComplete}/>}
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
