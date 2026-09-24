@@ -38,6 +38,7 @@ test("todas las lecciones tienen contenido válido y enlazan a un curso existent
     const course = COURSES.find(c => c.id === courseId);
     assert.ok(course, `curso ${courseId}`);
     assert.ok(course.lessons[n - 1], `${key} existe en el temario`);
+    assert.equal(l.title, course.lessons[n - 1].title, `${key}: el título coincide con el temario`);
     assert.ok(l.sections.length && l.challenge.steps.length && l.exam.length >= 4, key);
     for (const q of l.exam) assert.ok(q.correct >= 0 && q.correct < q.opts.length, `${key}: ${q.q}`);
   }
@@ -56,7 +57,7 @@ test("tier 2 bloqueado hasta dominar un curso tier 1 de la rama", async () => {
   const mind = cat.body.branches.find(b => b.id === "mind");
   assert.equal(mind.courses.find(c => c.id === "ultraprod").status, "locked");
   assert.equal((await call("GET", "/api/courses/ultraprod/lessons/7")).status, 403);
-  assert.equal((await call("GET", "/api/courses/salud/lessons/2")).status, 404, "lección sin contenido");
+  assert.equal((await call("GET", "/api/courses/salud/lessons/3")).status, 404, "lección sin contenido");
 
   // Lección → examen → reto en Salud Mental (tier 1)
   const lesson = await call("GET", "/api/courses/salud/lessons/1");
@@ -86,7 +87,13 @@ test("tier 2 bloqueado hasta dominar un curso tier 1 de la rama", async () => {
 
   const ch = await call("POST", "/api/courses/salud/lessons/1/challenge", { report: "Registré tres pensamientos y los cuestioné", share: true });
   assert.equal(ch.status, 200);
-  assert.ok(ch.body.rewards.some(r => r.label.startsWith("Curso dominado")), "curso dominado al completar todo");
+  assert.ok(!ch.body.rewards.some(r => r.label.startsWith("Curso dominado")), "aún falta la lección 2");
+
+  // Lección 2 completa → curso dominado
+  await call("POST", "/api/courses/salud/lessons/2/complete");
+  await call("POST", "/api/courses/salud/lessons/2/exam", { answers: LESSONS["salud:2"].exam.map(q => q.correct) });
+  const ch2 = await call("POST", "/api/courses/salud/lessons/2/challenge", { report: "Practiqué la respiración 4-6 cada día" });
+  assert.ok(ch2.body.rewards.some(r => r.label.startsWith("Curso dominado")), "curso dominado al completar todo");
 
   cat = await call("GET", "/api/catalog");
   const mind2 = cat.body.branches.find(b => b.id === "mind");

@@ -17,7 +17,7 @@ El mismo servidor Node sirve la API y el frontend (`index.html` + `leccion.html`
 |---------|--------------|
 | `server.js` | API REST, lógica de progreso, XP, badges y misiones. Sirve los HTML. |
 | `catalog.js` | Ramas, cursos (temario), recursos de la librería, badges, misiones y valores de XP. |
-| `lessons.js` | Contenido de las lecciones (secciones, reto y examen). |
+| `lessons/` | Contenido de las lecciones, un archivo por rama (`cuerpo.js`, `mente.js`…). `index.js` los une. |
 | `index.html` | App principal: Inicio, Árbol, Escuela, Librería, Comunidad y Perfil. |
 | `leccion.html` | Reproductor de lección: `leccion.html?course=<id>&lesson=<n>`. |
 | `test/api.test.js` | Tests de integración de la API. |
@@ -55,11 +55,11 @@ Si el frontend se abre desde otro dominio, apunta por defecto a `https://lovely-
 - Cada **nodo del árbol es un curso**. Los cursos de **tier 1** están abiertos; un curso de **tier N** se desbloquea al **dominar** un curso de tier N‑1 de la misma rama.
 - Cada lección tiene 3 fases: **lección** (+50 XP), **reto** (+100 XP) y **examen** (+150 XP, se aprueba con el 75%). El reto puede dejarse para después.
 - Un curso está **dominado** cuando todas sus lecciones disponibles tienen las 3 fases (+300 XP). Una rama está dominada cuando todos sus cursos con contenido lo están (+1,000 XP).
-- Las lecciones sin contenido en `lessons.js` aparecen como **Próximamente** y no cuentan para el porcentaje.
+- Las lecciones sin contenido en `lessons/` aparecen como **Próximamente** y no cuentan para el porcentaje.
 - Toda la XP se calcula en el servidor y cada paso se premia **una sola vez**. El examen se corrige en el servidor: el cliente nunca recibe las respuestas correctas.
 
 ### Añadir una lección
-Agrega una entrada `"<courseId>:<n>"` en `lessons.js` siguiendo la estructura de las existentes. `n` es la posición en el temario del curso (`catalog.js`). El test `npm test` valida la estructura.
+Agrega una entrada `"<courseId>:<n>"` en el archivo de su rama dentro de `lessons/` siguiendo la estructura de las existentes. `n` es la posición en el temario del curso (`catalog.js`). El título debe coincidir con el del temario. El test `npm test` valida la estructura.
 
 ---
 
@@ -148,7 +148,7 @@ Primer paso · Invocador · Atleta (10 lecciones) · Erudito (5 recursos) · Voz
 ---
 
 ## Próximos pasos
-1. Escribir el resto de lecciones en `lessons.js` (hoy hay 16: la primera de cada curso de tier 1 y 2, más Deep Work).
+1. Escribir el resto de lecciones en `lessons/` (hoy hay 36: todos los cursos tienen contenido; los de tier 1 y 2 tienen al menos 2 lecciones).
 2. Migrar NeDB a **PostgreSQL** (Supabase) o **MongoDB Atlas** cuando crezca el número de usuarios.
 3. Añadir rate limiting (`express-rate-limit`) en login y registro.
 4. Retos semanales y "jefe del mes" (los valores de XP ya están definidos en `catalog.js`).
