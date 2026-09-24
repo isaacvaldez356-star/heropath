@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HeroPath — Lección</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+:root{
+  --gold:#C9A84C;--gold-light:#E8C97A;--gold-dark:#8A6A28;
+  --purple:#7B5EA7;--purple-light:#A07FCC;--purple-dark:#4A3270;
+  --teal:#2BBFA0;--teal-dark:#1A7A68;
+  --bg:#0A0A0F;--bg2:#12121A;--bg3:#1A1A26;--bg4:#222233;
+  --border:rgba(201,168,76,0.15);--border2:rgba(201,168,76,0.3);
+  --text:#E8E0D0;--text2:#A09880;--text3:#665E50;
+  --red:#C0392B;--green:#27AE60;--orange:#E67E22;
+  --font-title:'Cinzel',serif;--font-body:'Inter',sans-serif;
+  --r:8px;--r2:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:14px;line-height:1.6;min-height:100vh;}
+h1,h2,h3{font-family:var(--font-title);font-weight:500;letter-spacing:0.05em;}
+button{cursor:pointer;border:none;background:none;font-family:var(--font-body);color:var(--text);}
+button:disabled{cursor:not-allowed;}
+a{color:inherit;text-decoration:none;}
+.spinner{border:2px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;display:inline-block;}
+.err{background:rgba(192,57,43,0.12);border:0.5px solid rgba(192,57,43,0.4);border-radius:8px;padding:10px 14px;font-size:12px;color:#E07060;}
+.bottom-bar{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,15,0.96);backdrop-filter:blur(12px);border-top:0.5px solid var(--border);padding:14px 16px;max-width:480px;margin:0 auto;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:var(--bg2);}
+::-webkit-scrollbar-thumb{background:var(--gold-dark);border-radius:2px;}
+.card{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:16px;}
+.card-sm{background:var(--bg3);border:0.5px solid var(--border);border-radius:var(--r);padding:10px 12px;}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 9px;border-radius:20px;border:0.5px solid;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:var(--r);font-size:13px;font-weight:500;transition:all .2s;cursor:pointer;border:0.5px solid var(--border2);}
+.btn-gold{background:var(--gold);color:#0A0A0F;border-color:var(--gold);}
+.btn-gold:hover{background:var(--gold-light);}
+.btn-ghost{background:transparent;color:var(--text2);}
+.btn-ghost:hover{color:var(--text);border-color:var(--border2);}
+.btn-teal{background:var(--teal);color:#0A0A0F;border-color:var(--teal);}
+.btn-teal:hover{background:#34D6B5;}
+.btn-purple{background:var(--purple);color:white;border-color:var(--purple);}
+.btn-purple:hover{background:var(--purple-light);}
+.prog-bar{height:4px;border-radius:2px;background:var(--bg4);overflow:hidden;}
+.prog-fill{height:100%;border-radius:2px;transition:width .6s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+.fade-in{animation:fadeIn .35s ease forwards;}
+@keyframes slideUp{from{opacity:0;transform:translateY(30px);}to{opacity:1;transform:translateY(0);}}
+.slide-up{animation:slideUp .4s ease forwards;}
+@keyframes pop{0%{transform:scale(1);}50%{transform:scale(1.15);}100%{transform:scale(1);}}
+.pop{animation:pop .3s ease;}
+@keyframes xpFloat{0%{opacity:1;transform:translateY(0);}100%{opacity:0;transform:translateY(-40px);}}
+.xp-float{animation:xpFloat .9s ease forwards;}
+@keyframes celebrate{0%{transform:scale(0.8);opacity:0;}60%{transform:scale(1.05);}100%{transform:scale(1);opacity:1;}}
+.celebrate{animation:celebrate .5s ease forwards;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.spin{animation:spin 1s linear infinite;}
+@keyframes glow{0%,100%{box-shadow:0 0 8px rgba(201,168,76,0.3);}50%{box-shadow:0 0 20px rgba(201,168,76,0.6);}}
+.glow{animation:glow 2s ease-in-out infinite;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect}=React;
+
+// ── API (misma resolución que index.html) ─────────────────
+// La API vive en el mismo dominio que la página (Vercel, Railway o localhost:3001).
+// Solo si se abre el HTML como archivo local se usa REMOTE_API. Se puede forzar con localStorage "hp_api".
+const REMOTE_API="https://heropath.vercel.app";
+const API=(()=>{
+  try{const o=localStorage.getItem("hp_api");if(o)return o.replace(/\/$/,"");}catch{}
+  return location.protocol==="file:"?REMOTE_API:"";
+})();
+const TOKEN=localStorage.getItem("hp_token");
+if(!TOKEN) location.replace("index.html");
+
+async function api(method,path,body){
+  let r;
+  try{
+    r=await fetch(API+path,{method,headers:{"Content-Type":"application/json",Authorization:`Bearer ${TOKEN}`},body:body?JSON.stringify(body):undefined});
+  }catch{throw new Error("No se pudo conectar con el servidor");}
+  const d=await r.json().catch(()=>({}));
+  if(r.status===401){localStorage.removeItem("hp_token");location.replace("index.html");}
+  if(!r.ok){const e=new Error(d.error||"Error del servidor");e.status=r.status;throw e;}
+  return d;
+}
+
+const params=new URLSearchParams(location.search);
+const COURSE_ID=params.get("course");
+const lessonUrl=(c,n)=>`leccion.html?course=${encodeURIComponent(c)}&lesson=${n}`;
+const PHASES=[["lesson","Lección"],["challenge","Reto"],["exam","Examen"]];
+
+// ── XP Toast ──────────────────────────────────────────
+function XPToast({amount,onDone}){
+  useEffect(()=>{const t=setTimeout(onDone,900);return()=>clearTimeout(t);},[]);
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
+      <div className="xp-float" style={{background:"var(--gold)",color:"#0A0A0F",fontFamily:"var(--font-title)",fontSize:22,fontWeight:700,
+        padding:"12px 28px",borderRadius:40,whiteSpace:"nowrap"}}>
+        +{amount} XP
+      </div>
+    </div>
+  );
+}
+
+function RankUpModal({from,to,onClose}){
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div className="card celebrate" style={{maxWidth:300,width:"100%",textAlign:"center",border:"1.5px solid var(--gold)"}}>
+        <div style={{fontSize:56,marginBottom:12}}>🏆</div>
+        <div style={{fontFamily:"var(--font-title)",fontSize:12,color:"var(--text3)",marginBottom:4}}>¡Nuevo rango desbloqueado!</div>
+        <div style={{fontFamily:"var(--font-title)",fontSize:28,color:"var(--gold)",marginBottom:6}}>{to}</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:20}}>Superaste el rango <b style={{color:"var(--text)"}}>{from}</b>.</div>
+        <button onClick={onClose} className="btn btn-gold" style={{width:"100%"}}>¡A conquistar! <i className="ti ti-arrow-right"/></button>
+      </div>
+    </div>
+  );
+}
+
+// ── Progress Header ───────────────────────────────────
+function ProgressHeader({data,phase,progress,onPhase,onMenu}){
+  const idx=PHASES.findIndex(([p])=>p===phase);
+  const doneCount=["lesson","challenge","exam"].filter(k=>progress[k]).length;
+  return(
+    <header style={{background:"rgba(10,10,15,0.95)",backdropFilter:"blur(12px)",borderBottom:"0.5px solid var(--border)",padding:"12px 16px",position:"sticky",top:0,zIndex:50}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+        <a href="index.html" className="btn btn-ghost" style={{padding:"6px 8px",fontSize:12}} aria-label="Volver">
+          <i className="ti ti-arrow-left" style={{fontSize:16}}/>
+        </a>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:11,color:"var(--text3)",marginBottom:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>Lección {data.lesson.number} de {data.course.totalLessons} · {data.course.title}</div>
+          <div style={{fontFamily:"var(--font-title)",fontSize:13,color:"var(--text)"}}>{data.lesson.title}</div>
+        </div>
+        <div style={{display:"flex",gap:5}}>
+          {PHASES.map(([p,label],i)=>{
+            const done=progress[p],current=phase===p;
+            const reachable=p==="lesson"||progress.lesson;
+            return(
+              <button key={p} onClick={()=>reachable&&onPhase(p)} disabled={!reachable} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                <div style={{width:24,height:24,borderRadius:"50%",
+                  background:done?"var(--teal)":current?"var(--purple)":"var(--bg3)",
+                  border:`0.5px solid ${done?"var(--teal)":current?"var(--purple)":"var(--border)"}`,
+                  outline:current&&done?"1.5px solid var(--purple-light)":"none",
+                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,
+                  color:done||current?"white":"var(--text3)"}}>
+                  {done?<i className="ti ti-check" style={{fontSize:11}}/>:i+1}
+                </div>
+                <span style={{fontSize:8,color:current?"var(--purple-light)":"var(--text3)",whiteSpace:"nowrap"}}>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <button onClick={onMenu} className="btn btn-ghost" style={{padding:"6px 8px"}} aria-label="Lecciones del curso">
+          <i className="ti ti-list" style={{fontSize:16}}/>
+        </button>
+      </div>
+      <div className="prog-bar">
+        <div className="prog-fill" style={{width:`${Math.max(idx*33,doneCount*33.4)}%`,background:"var(--purple)"}}/>
+      </div>
+    </header>
+  );
+}
+
+// ── Lesson Phase ──────────────────────────────────────
+function LessonPhase({data,done,onComplete}){
+  const L=data.lesson;
+  const color=data.course.color;
+  const [sectionIdx,setSectionIdx]=useState(0);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const section=L.sections[sectionIdx];
+  const isLast=sectionIdx===L.sections.length-1;
+
+  useEffect(()=>window.scrollTo(0,0),[sectionIdx]);
+
+  const next=async()=>{
+    if(!isLast){setSectionIdx(i=>i+1);return;}
+    setBusy(true);setError("");
+    try{await onComplete();}
+    catch(e){setError(e.message);}
+    finally{setBusy(false);}
+  };
+
+  return(
+    <div style={{padding:"20px 16px 120px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div style={{display:"flex",gap:4}}>
+          {L.sections.map((_,i)=>(
+            <div key={i} style={{height:3,borderRadius:2,transition:"all .3s",
+              background:i<=sectionIdx?"var(--purple)":"var(--bg4)",
+              width:i===sectionIdx?28:12}}/>
+          ))}
+        </div>
+        <span style={{fontSize:11,color:"var(--text3)"}}>{sectionIdx+1} / {L.sections.length} · {L.duration}</span>
+      </div>
+
+      <div className="fade-in" key={sectionIdx}>
+        {section.type==="intro"&&(
+          <div>
+            <div style={{width:56,height:56,borderRadius:14,background:`${color}33`,border:`0.5px solid ${color}`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16}}>
+              <i className={`ti ${data.course.icon}`} style={{fontSize:28,color}}/>
+            </div>
+            {sectionIdx===0&&<div style={{fontSize:12,color:"var(--text3)",marginBottom:6,fontStyle:"italic"}}>{L.subtitle}</div>}
+            <h2 style={{fontSize:20,color:"var(--gold)",marginBottom:8,lineHeight:1.3}}>{section.heading}</h2>
+            <div style={{width:40,height:2,background:"var(--gold-dark)",borderRadius:1,marginBottom:16}}/>
+            <p style={{fontSize:14,color:"var(--text2)",lineHeight:1.8}}>{section.text}</p>
+            {L.learn?.length>0&&(
+              <div style={{marginTop:20,padding:"12px 16px",background:"rgba(123,94,167,0.08)",border:"0.5px solid rgba(123,94,167,0.3)",borderRadius:"var(--r2)"}}>
+                <div style={{fontSize:11,color:"var(--purple-light)",fontWeight:500,marginBottom:4}}>En esta lección aprenderás:</div>
+                {L.learn.map((t,i)=>(
+                  <div key={i} style={{display:"flex",gap:8,fontSize:12,color:"var(--text2)",marginTop:6}}>
+                    <i className="ti ti-check" style={{fontSize:13,color:"var(--teal)",flexShrink:0,marginTop:2}}/>
+                    {t}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {section.type==="concept"&&(
+          <div>
+            <h2 style={{fontSize:18,color:"var(--gold)",marginBottom:16}}>{section.heading}</h2>
+            {section.items.map((item,i)=>(
+              <div key={i} className="card" style={{marginBottom:12,border:`0.5px solid ${i===0?"var(--purple)":"var(--border)"}`,background:i===0?"rgba(123,94,167,0.1)":"var(--bg2)"}}>
+                <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                  <div style={{width:36,height:36,borderRadius:9,background:i===0?"rgba(123,94,167,0.2)":"rgba(255,255,255,0.04)",border:`0.5px solid ${i===0?"var(--purple)":"var(--border)"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <i className={`ti ${item.icon}`} style={{fontSize:18,color:i===0?"var(--purple-light)":"var(--text3)"}}/>
+                  </div>
+                  <div>
+                    <div style={{fontFamily:"var(--font-title)",fontSize:14,color:i===0?"var(--purple-light)":"var(--text2)",marginBottom:4}}>{item.label}</div>
+                    <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.6}}>{item.desc}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {section.note&&(
+              <div style={{padding:"10px 14px",background:"rgba(201,168,76,0.08)",border:"0.5px solid rgba(201,168,76,0.25)",borderRadius:"var(--r)"}}>
+                <span style={{fontSize:12,color:"var(--text2)"}}>{section.note}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {section.type==="quote"&&(
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:260,textAlign:"center"}}>
+            <i className="ti ti-quote" style={{fontSize:48,color:"var(--gold-dark)",marginBottom:20}}/>
+            <blockquote style={{fontFamily:"var(--font-title)",fontSize:18,color:"var(--text)",lineHeight:1.6,marginBottom:16,maxWidth:340}}>
+              "{section.text}"
+            </blockquote>
+            <div style={{width:40,height:1,background:"var(--gold-dark)",marginBottom:12}}/>
+            <div style={{fontSize:13,color:"var(--gold)"}}>{section.author}</div>
+          </div>
+        )}
+
+        {section.type==="rules"&&(
+          <div>
+            <h2 style={{fontSize:18,color:"var(--gold)",marginBottom:16}}>{section.heading}</h2>
+            {section.rules.map((r,i)=>(
+              <div key={i} style={{display:"flex",gap:12,marginBottom:14,padding:"12px 14px",background:"var(--bg2)",border:"0.5px solid var(--border)",borderRadius:"var(--r)"}}>
+                <div style={{width:28,height:28,borderRadius:"50%",background:"rgba(201,168,76,0.15)",border:"0.5px solid var(--gold-dark)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-title)",fontSize:13,color:"var(--gold)",flexShrink:0}}>{i+1}</div>
+                <div>
+                  <div style={{fontSize:13,fontWeight:500,color:"var(--text)",marginBottom:3}}>{r.title}</div>
+                  <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.5}}>{r.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {section.type==="tip"&&(
+          <div>
+            <div style={{textAlign:"center",marginBottom:20}}>
+              <div style={{width:56,height:56,borderRadius:14,background:"rgba(43,191,160,0.15)",border:"0.5px solid var(--teal)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}>
+                <i className="ti ti-bulb" style={{fontSize:28,color:"var(--teal)"}}/>
+              </div>
+              <h2 style={{fontSize:18,color:"var(--teal)"}}>{section.heading}</h2>
+            </div>
+            <div style={{padding:"16px",background:"rgba(43,191,160,0.08)",border:"0.5px solid rgba(43,191,160,0.3)",borderRadius:"var(--r2)",marginBottom:16}}>
+              <p style={{fontSize:14,color:"var(--text2)",lineHeight:1.8}}>{section.text}</p>
+            </div>
+            {isLast&&L.summary?.length>0&&(
+              <div style={{padding:"12px 14px",background:"var(--bg2)",border:"0.5px solid var(--border)",borderRadius:"var(--r)"}}>
+                <div style={{fontSize:11,color:"var(--gold)",fontWeight:500,marginBottom:8}}>Resumen de la lección</div>
+                {L.summary.map((t,i)=>(
+                  <div key={i} style={{display:"flex",gap:6,fontSize:12,color:"var(--text2)",marginBottom:4}}>
+                    <i className="ti ti-check" style={{fontSize:12,color:"var(--teal)",flexShrink:0,marginTop:2}}/>
+                    {t}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {error&&<div className="err" style={{marginTop:16}}>{error}</div>}
+      </div>
+
+      <div className="bottom-bar" style={{display:"flex",gap:10}}>
+        {sectionIdx>0&&(
+          <button onClick={()=>setSectionIdx(i=>i-1)} className="btn btn-ghost" style={{flex:0,padding:"10px 14px"}} aria-label="Anterior">
+            <i className="ti ti-arrow-left" style={{fontSize:16}}/>
+          </button>
+        )}
+        <button onClick={next} disabled={busy} className="btn btn-gold" style={{flex:1,fontSize:13}}>
+          {busy?<span className="spinner" style={{width:16,height:16}}/>
+            :isLast?<><i className="ti ti-check"/> {done?"Terminar repaso":`Completar lección · +${L.xp.lesson} XP`}</>
+            :<>Siguiente <i className="ti ti-arrow-right"/></>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Challenge Phase ────────────────────────────────────
+function ChallengePhase({data,done,onSubmit,onSkip}){
+  const C=data.lesson.challenge;
+  const xp=data.lesson.xp.challenge;
+  const [checked,setChecked]=useState(Array(C.steps.length).fill(false));
+  const [report,setReport]=useState("");
+  const [share,setShare]=useState(true);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const allChecked=checked.every(Boolean);
+  const len=report.trim().length;
+  const canSubmit=allChecked&&len>=10&&len<=1000;
+
+  const submit=async()=>{
+    if(!canSubmit||busy)return;
+    setBusy(true);setError("");
+    try{await onSubmit(report.trim(),share);}
+    catch(e){setError(e.message);setBusy(false);}
+  };
+
+  if(done) return(
+    <div className="fade-in" style={{padding:"40px 16px 120px",textAlign:"center"}}>
+      <i className="ti ti-circle-check" style={{fontSize:56,color:"var(--teal)"}}/>
+      <h2 style={{fontFamily:"var(--font-title)",fontSize:18,color:"var(--teal)",margin:"10px 0 6px"}}>Reto entregado</h2>
+      <p style={{fontSize:13,color:"var(--text2)",marginBottom:24}}>{C.title}: ya sumaste esta victoria a tu historial.</p>
+      <button onClick={onSkip} className="btn btn-purple" style={{width:"100%"}}>Continuar <i className="ti ti-arrow-right"/></button>
+    </div>
+  );
+
+  return(
+    <div style={{padding:"20px 16px 150px"}}>
+      <div style={{marginBottom:20}}>
+        <span className="pill" style={{background:"rgba(230,126,34,0.15)",borderColor:"var(--orange)",color:"var(--orange)",marginBottom:10,display:"inline-flex"}}>
+          <i className="ti ti-target" style={{fontSize:12}}/> Reto de aplicación · +{xp} XP
+        </span>
+        <h2 style={{fontFamily:"var(--font-title)",fontSize:20,color:"var(--gold)",marginBottom:8,lineHeight:1.3}}>{C.title}</h2>
+        <p style={{fontSize:13,color:"var(--text2)",lineHeight:1.7}}>{C.desc}</p>
+      </div>
+
+      <div className="card" style={{marginBottom:16,border:"0.5px solid rgba(230,126,34,0.3)",background:"rgba(230,126,34,0.05)"}}>
+        <div style={{fontSize:12,color:"var(--orange)",fontWeight:500,marginBottom:12}}>Pasos del reto</div>
+        {C.steps.map((step,i)=>(
+          <button key={i} onClick={()=>setChecked(prev=>prev.map((c,j)=>j===i?!c:c))}
+            style={{display:"flex",gap:10,alignItems:"flex-start",padding:"10px 0",width:"100%",textAlign:"left",borderBottom:i<C.steps.length-1?"0.5px solid var(--border)":"none"}}>
+            <div style={{width:22,height:22,borderRadius:6,border:`0.5px solid ${checked[i]?"var(--teal)":"var(--border2)"}`,background:checked[i]?"var(--teal)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1,transition:"all .2s"}}>
+              {checked[i]&&<i className="ti ti-check" style={{fontSize:13,color:"#0A0A0F"}}/>}
+            </div>
+            <div style={{display:"flex",gap:8,flex:1,alignItems:"flex-start"}}>
+              <span style={{fontSize:11,color:"var(--orange)",fontWeight:500,flexShrink:0,marginTop:1}}>{i+1}.</span>
+              <span style={{fontSize:12,color:checked[i]?"var(--text3)":"var(--text2)",textDecoration:checked[i]?"line-through":"none",lineHeight:1.5,transition:"all .2s"}}>{step}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:12,color:"var(--purple-light)",fontWeight:500,marginBottom:8}}>¿Qué lograste?</div>
+        <textarea
+          value={report}
+          onChange={e=>setReport(e.target.value)}
+          maxLength={1000}
+          placeholder="Cuenta brevemente cómo te fue con el reto..."
+          style={{width:"100%",background:"var(--bg3)",border:"0.5px solid var(--border2)",borderRadius:"var(--r)",padding:"10px 12px",color:"var(--text)",fontSize:12,lineHeight:1.6,resize:"none",height:100,outline:"none",fontFamily:"var(--font-body)"}}
+        />
+        <div style={{fontSize:10,color:len>=10?"var(--teal)":"var(--text3)",marginTop:4,textAlign:"right"}}>{len} / mín. 10 caracteres</div>
+        <label style={{display:"flex",gap:8,alignItems:"center",fontSize:12,color:"var(--text2)",marginTop:8,cursor:"pointer"}}>
+          <input type="checkbox" checked={share} onChange={e=>setShare(e.target.checked)} style={{accentColor:"var(--teal)"}}/>
+          Compartir mi victoria en la comunidad
+        </label>
+      </div>
+
+      <button onClick={onSkip} className="btn btn-ghost" style={{width:"100%",fontSize:12}}>
+        <i className="ti ti-clock"/> Haré el reto más tarde · ir al examen
+      </button>
+      {error&&<div className="err" style={{marginTop:12}}>{error}</div>}
+
+      <div className="bottom-bar">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <span style={{fontSize:11,color:"var(--text2)"}}>{checked.filter(Boolean).length}/{C.steps.length} pasos marcados</span>
+          {!allChecked&&<span style={{fontSize:11,color:"var(--text3)"}}>Completa todos los pasos</span>}
+          {allChecked&&len<10&&<span style={{fontSize:11,color:"var(--text3)"}}>Escribe tu resultado</span>}
+          {canSubmit&&<span style={{fontSize:11,color:"var(--teal)"}}>¡Listo para entregar!</span>}
+        </div>
+        <button onClick={submit} disabled={!canSubmit||busy} className="btn btn-teal" style={{width:"100%",opacity:canSubmit?1:0.4}}>
+          {busy?<span className="spinner" style={{width:16,height:16}}/>:<><i className="ti ti-send"/> Entregar reto · +{xp} XP</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Exam Phase ─────────────────────────────────────────
+function ExamPhase({data,done,onSubmit,onFinish}){
+  const Q=data.lesson.exam;
+  const base=`/api/courses/${data.course.id}/lessons/${data.lesson.number}`;
+  const [qIdx,setQIdx]=useState(0);
+  const [selected,setSelected]=useState(null);
+  const [feedback,setFeedback]=useState(null); // {correct, correctIndex, exp}
+  const [answers,setAnswers]=useState([]);
+  const [results,setResults]=useState([]);
+  const [result,setResult]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const q=Q[qIdx];
+  const isLast=qIdx===Q.length-1;
+
+  const confirm=async()=>{
+    if(selected===null||busy)return;
+    setBusy(true);setError("");
+    try{
+      const fb=await api("POST",`${base}/exam/check`,{question:qIdx,answer:selected});
+      setFeedback(fb);
+      setAnswers(a=>[...a,selected]);
+      setResults(r=>[...r,fb.correct]);
+    }catch(e){setError(e.message);}
+    finally{setBusy(false);}
+  };
+
+  const advance=async()=>{
+    if(!isLast){setQIdx(i=>i+1);setSelected(null);setFeedback(null);window.scrollTo(0,0);return;}
+    setBusy(true);setError("");
+    try{setResult(await onSubmit(answers));}
+    catch(e){setError(e.message);}
+    finally{setBusy(false);}
+  };
+
+  const retry=()=>{setQIdx(0);setSelected(null);setFeedback(null);setAnswers([]);setResults([]);setResult(null);};
+
+  if(result){
+    const {passed,score,total,passScore}=result;
+    return(
+      <div style={{padding:"40px 16px",textAlign:"center",minHeight:"70vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+        <div className="celebrate" style={{marginBottom:24}}>
+          <div style={{width:80,height:80,borderRadius:"50%",background:passed?"rgba(43,191,160,0.15)":"rgba(192,57,43,0.15)",border:`2px solid ${passed?"var(--teal)":"var(--red)"}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}>
+            <i className={`ti ${passed?"ti-trophy":"ti-x"}`} style={{fontSize:36,color:passed?"var(--teal)":"var(--red)"}}/>
+          </div>
+          <h2 style={{fontFamily:"var(--font-title)",fontSize:22,color:passed?"var(--teal)":"var(--red)",marginBottom:8}}>
+            {passed?"¡Examen aprobado!":"Sigue practicando"}
+          </h2>
+          <div style={{fontSize:40,fontFamily:"var(--font-title)",color:"var(--gold)",marginBottom:4}}>{score}/{total}</div>
+          <div style={{fontSize:13,color:"var(--text2)"}}>
+            {passed?(result.firstPass?`+${data.lesson.xp.exam} XP ganados`:"Ya habías aprobado este examen antes"):`Necesitas ${passScore}/${total} para aprobar. ¡Tú puedes!`}
+          </div>
+        </div>
+        {error&&<div className="err" style={{marginBottom:12}}>{error}</div>}
+        <div style={{display:"flex",gap:10,width:"100%"}}>
+          {!passed&&<button onClick={retry} className="btn btn-ghost" style={{flex:1}}><i className="ti ti-refresh"/> Reintentar</button>}
+          {passed&&<button onClick={onFinish} className="btn btn-gold" style={{flex:1}}>Continuar <i className="ti ti-arrow-right"/></button>}
+        </div>
+      </div>
+    );
+  }
+
+  return(
+    <div style={{padding:"20px 16px 120px"}}>
+      {done&&qIdx===0&&!feedback&&<div className="ok" style={{marginBottom:12,fontSize:12,background:"rgba(43,191,160,0.1)",border:"0.5px solid rgba(43,191,160,0.35)",borderRadius:8,padding:"8px 12px",color:"var(--teal)"}}>Ya aprobaste este examen. Puedes repetirlo para practicar.</div>}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <span className="pill" style={{background:"rgba(201,168,76,0.12)",borderColor:"var(--gold-dark)",color:"var(--gold)"}}>
+          <i className="ti ti-help" style={{fontSize:11}}/> Pregunta {qIdx+1} de {Q.length}
+        </span>
+        <div style={{display:"flex",gap:4}}>
+          {Q.map((_,i)=>(
+            <div key={i} style={{width:8,height:8,borderRadius:"50%",background:i<results.length?(results[i]?"var(--teal)":"var(--red)"):i===qIdx?"var(--purple)":"var(--bg4)",transition:"all .3s"}}/>
+          ))}
+        </div>
+      </div>
+
+      <div className="card fade-in" key={qIdx} style={{marginBottom:16,border:"0.5px solid rgba(201,168,76,0.2)"}}>
+        <div style={{fontSize:11,color:"var(--gold)",fontWeight:500,marginBottom:10}}>Examen de dominio · aprueba con {data.lesson.passScore}/{Q.length} · +{data.lesson.xp.exam} XP</div>
+        <p style={{fontSize:14,color:"var(--text)",lineHeight:1.7,fontWeight:500}}>{q.q}</p>
+      </div>
+
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+        {q.opts.map((opt,i)=>{
+          let bg="var(--bg2)",border="var(--border)",color="var(--text2)";
+          const answered=!!feedback;
+          if(selected===i&&!answered){bg="rgba(123,94,167,0.15)";border="var(--purple)";color="var(--text)";}
+          if(answered){
+            if(i===feedback.correctIndex){bg="rgba(43,191,160,0.12)";border="var(--teal)";color="var(--teal)";}
+            else if(i===selected){bg="rgba(192,57,43,0.12)";border="var(--red)";color="var(--red)";}
+          }
+          return(
+            <button key={i} onClick={()=>!answered&&setSelected(i)}
+              style={{textAlign:"left",padding:"12px 14px",borderRadius:"var(--r)",background:bg,border:`0.5px solid ${border}`,display:"flex",gap:10,alignItems:"center",transition:"all .2s",cursor:answered?"default":"pointer"}}>
+              <div style={{width:22,height:22,borderRadius:"50%",border:`0.5px solid ${border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:answered&&i===feedback.correctIndex?"var(--teal)":answered&&i===selected?"var(--red)":selected===i?"var(--purple)":"transparent",transition:"all .2s"}}>
+                {answered&&i===feedback.correctIndex&&<i className="ti ti-check" style={{fontSize:12,color:"white"}}/>}
+                {answered&&i===selected&&i!==feedback.correctIndex&&<i className="ti ti-x" style={{fontSize:12,color:"white"}}/>}
+                {!answered&&selected===i&&<div style={{width:8,height:8,borderRadius:"50%",background:"white"}}/>}
+              </div>
+              <span style={{fontSize:13,color,lineHeight:1.5}}>{opt}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {feedback&&(
+        <div className="fade-in" style={{padding:"12px 14px",background:feedback.correct?"rgba(43,191,160,0.08)":"rgba(192,57,43,0.08)",border:`0.5px solid ${feedback.correct?"rgba(43,191,160,0.3)":"rgba(192,57,43,0.3)"}`,borderRadius:"var(--r)",marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:500,color:feedback.correct?"var(--teal)":"var(--red)",marginBottom:4}}>
+            {feedback.correct?"¡Correcto!":"Respuesta incorrecta"}
+          </div>
+          <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.5}}>{feedback.exp}</div>
+        </div>
+      )}
+      {error&&<div className="err">{error}</div>}
+
+      <div className="bottom-bar">
+        {!feedback
+          ?<button onClick={confirm} disabled={selected===null||busy} className="btn btn-purple" style={{width:"100%",opacity:selected===null?0.4:1}}>
+            {busy?<span className="spinner" style={{width:16,height:16}}/>:<>Confirmar respuesta <i className="ti ti-check"/></>}
+          </button>
+          :<button onClick={advance} disabled={busy} className="btn btn-gold" style={{width:"100%"}}>
+            {busy?<span className="spinner" style={{width:16,height:16}}/>:isLast?<>Ver resultado <i className="ti ti-trophy"/></>:<>Siguiente pregunta <i className="ti ti-arrow-right"/></>}
+          </button>}
+      </div>
+    </div>
+  );
+}
+
+// ── Complete Screen ────────────────────────────────────
+function CompleteScreen({data,progress,rewards,onReview,onPhase}){
+  const total=rewards.reduce((s,r)=>s+r.xp,0);
+  const mastered=progress.lesson&&progress.challenge&&progress.exam;
+  const pending=PHASES.filter(([p])=>!progress[p]);
+  return(
+    <div className="celebrate fade-in" style={{padding:"40px 16px",textAlign:"center",minHeight:"80vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+      <div className="glow" style={{width:90,height:90,borderRadius:"50%",background:"rgba(201,168,76,0.15)",border:"2px solid var(--gold)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
+        <i className={`ti ${mastered?"ti-trophy":"ti-hourglass"}`} style={{fontSize:42,color:"var(--gold)"}}/>
+      </div>
+      <h1 style={{fontFamily:"var(--font-title)",fontSize:24,color:"var(--gold)",marginBottom:8}}>{mastered?"¡Lección dominada!":"¡Buen avance!"}</h1>
+      <p style={{fontSize:13,color:"var(--text2)",marginBottom:24,maxWidth:300,lineHeight:1.7}}>
+        {mastered
+          ?`Completaste las 3 fases de "${data.lesson.title}". Tu árbol de ${data.course.branchName} sigue creciendo.`
+          :`Te falta: ${pending.map(([,l])=>l.toLowerCase()).join(" y ")}. Vuelve cuando lo tengas listo.`}
+      </p>
+
+      {rewards.length>0&&(
+        <div style={{width:"100%",background:"var(--bg2)",border:"0.5px solid var(--border2)",borderRadius:"var(--r2)",padding:"16px",marginBottom:16}}>
+          <div style={{fontSize:11,color:"var(--gold)",fontWeight:500,marginBottom:12,textAlign:"left"}}>XP ganada en esta sesión</div>
+          {rewards.map((r,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--text2)",padding:"6px 0",borderBottom:i<rewards.length-1?"0.5px solid var(--border)":"none",textAlign:"left",gap:8}}>
+              <span>{r.label}</span>
+              <span style={{color:"var(--purple-light)",fontWeight:500,flexShrink:0}}>+{r.xp} XP</span>
+            </div>
+          ))}
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:14,color:"var(--gold)",fontFamily:"var(--font-title)",marginTop:10,paddingTop:10,borderTop:"0.5px solid var(--border2)"}}>
+            <span>Total</span>
+            <span>+{total} XP</span>
+          </div>
+        </div>
+      )}
+
+      {pending.length>0&&(
+        <div style={{display:"flex",gap:8,width:"100%",marginBottom:12}}>
+          {pending.map(([p,l])=>(
+            <button key={p} onClick={()=>onPhase(p)} className="btn btn-purple" style={{flex:1,fontSize:12}}>Ir al {l.toLowerCase()}</button>
+          ))}
+        </div>
+      )}
+
+      <div style={{display:"flex",gap:10,width:"100%",marginBottom:10}}>
+        <button onClick={onReview} className="btn btn-ghost" style={{flex:1}}>
+          <i className="ti ti-refresh"/> Repasar
+        </button>
+        {data.next
+          ?<a href={lessonUrl(data.course.id,data.next.n)} className="btn btn-gold" style={{flex:1}}>Siguiente lección <i className="ti ti-arrow-right"/></a>
+          :<a href="index.html" className="btn btn-gold" style={{flex:1}}>Volver a HeroPath <i className="ti ti-home"/></a>}
+      </div>
+      {data.next&&<div style={{fontSize:11,color:"var(--text3)"}}>Siguiente: {data.next.title}</div>}
+    </div>
+  );
+}
+
+// ── Lesson list sidebar ───────────────────────────────
+function Sidebar({data,onClose}){
+  return(
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:150,display:"flex",justifyContent:"flex-end"}}>
+      <div onClick={e=>e.stopPropagation()} className="slide-up" style={{width:270,background:"var(--bg2)",borderLeft:"0.5px solid var(--border2)",padding:"16px",overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
+        <div style={{fontFamily:"var(--font-title)",fontSize:13,color:"var(--gold)",marginBottom:2}}>{data.course.title}</div>
+        <div style={{fontSize:11,color:"var(--text3)",marginBottom:12}}>{data.course.pct}% completado</div>
+        {data.course.lessons.map(l=>{
+          const current=l.n===data.lesson.number;
+          const Row=l.available&&!current?"a":"div";
+          return(
+            <Row key={l.n} href={Row==="a"?lessonUrl(data.course.id,l.n):undefined} style={{display:"flex",gap:8,alignItems:"center",padding:"8px 10px",borderRadius:"var(--r)",background:current?"rgba(123,94,167,0.15)":"transparent",border:current?"0.5px solid var(--purple)":"0.5px solid transparent",opacity:l.available?1:0.45}}>
+              <div style={{width:20,height:20,borderRadius:"50%",background:l.mastered?"var(--teal)":current?"var(--purple)":"var(--bg3)",border:`0.5px solid ${l.mastered?"var(--teal)":current?"var(--purple)":"var(--border)"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:9,color:l.mastered||current?"white":"var(--text3)"}}>
+                {l.mastered?<i className="ti ti-check" style={{fontSize:10}}/>:l.n}
+              </div>
+              <span style={{fontSize:11,color:current?"var(--purple-light)":l.available?"var(--text2)":"var(--text3)",lineHeight:1.3,flex:1}}>{l.title}</span>
+              {!l.available&&<span style={{fontSize:9,color:"var(--text3)"}}>Pronto</span>}
+            </Row>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ───────────────────────────────────────────
+function App(){
+  const [data,setData]=useState(null);
+  const [error,setError]=useState("");
+  const [phase,setPhase]=useState(null);
+  const [progress,setProgress]=useState({lesson:false,challenge:false,exam:false});
+  const [rewards,setRewards]=useState([]);
+  const [toast,setToast]=useState(null);
+  const [rankUp,setRankUp]=useState(null);
+  const [sidebarOpen,setSidebarOpen]=useState(false);
+
+  useEffect(()=>{
+    (async()=>{
+      try{
+        if(!COURSE_ID) throw new Error("Falta el curso en la URL");
+        let n=parseInt(params.get("lesson"),10);
+        if(!n){
+          const course=await api("GET",`/api/courses/${COURSE_ID}`);
+          const pick=course.lessons.find(l=>l.available&&!l.mastered)||course.lessons.find(l=>l.available);
+          if(!pick) throw new Error("Este curso estará disponible próximamente");
+          n=pick.n;
+          history.replaceState(null,"",lessonUrl(COURSE_ID,n));
+        }
+        const d=await api("GET",`/api/courses/${COURSE_ID}/lessons/${n}`);
+        setData(d);
+        setProgress({lesson:d.progress.lesson,challenge:d.progress.challenge,exam:d.progress.exam});
+        setPhase(!d.progress.lesson?"lesson":!d.progress.challenge?"challenge":!d.progress.exam?"exam":"complete");
+        document.title=`HeroPath — ${d.lesson.title}`;
+      }catch(e){setError(e.message);}
+    })();
+  },[]);
+
+  const base=data&&`/api/courses/${data.course.id}/lessons/${data.lesson.number}`;
+
+  const applyRewards=res=>{
+    if(res.rewards?.length) setRewards(r=>[...r,...res.rewards]);
+    if(res.earned) setToast(res.earned);
+    if(res.rankUp) setRankUp(res.rankUp);
+  };
+  const go=p=>{setPhase(p);window.scrollTo(0,0);};
+  const nextAfter=(prog,from)=>{
+    const order=["lesson","challenge","exam"];
+    const after=order.slice(order.indexOf(from)+1).find(p=>!prog[p]);
+    return after||"complete";
+  };
+
+  const completeLesson=async()=>{
+    if(!progress.lesson){
+      const res=await api("POST",`${base}/complete`);
+      applyRewards(res);
+    }
+    const prog={...progress,lesson:true};
+    setProgress(prog);
+    go(nextAfter(prog,"lesson"));
+  };
+
+  const submitChallenge=async(report,share)=>{
+    const res=await api("POST",`${base}/challenge`,{report,share});
+    applyRewards(res);
+    const prog={...progress,challenge:true};
+    setProgress(prog);
+    go(nextAfter(prog,"challenge"));
+  };
+
+  const submitExam=async answers=>{
+    const res=await api("POST",`${base}/exam`,{answers});
+    applyRewards(res);
+    if(res.passed) setProgress(p=>({...p,exam:true}));
+    return res;
+  };
+
+  if(error) return(
+    <div style={{maxWidth:480,margin:"0 auto",padding:"80px 24px",textAlign:"center"}}>
+      <i className="ti ti-lock" style={{fontSize:48,color:"var(--text3)"}}/>
+      <p style={{fontSize:14,color:"var(--text2)",margin:"16px 0 24px"}}>{error}</p>
+      <a href="index.html" className="btn btn-gold"><i className="ti ti-arrow-left"/> Volver a HeroPath</a>
+    </div>
+  );
+
+  if(!data||!phase) return(
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <span className="spinner" style={{width:32,height:32}}/>
+    </div>
+  );
+
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",position:"relative"}}>
+      {toast&&<XPToast amount={toast} onDone={()=>setToast(null)}/>}
+      {rankUp&&<RankUpModal from={rankUp.from} to={rankUp.to} onClose={()=>setRankUp(null)}/>}
+      {phase!=="complete"&&<ProgressHeader data={data} phase={phase} progress={progress} onPhase={go} onMenu={()=>setSidebarOpen(true)}/>}
+      {sidebarOpen&&<Sidebar data={data} onClose={()=>setSidebarOpen(false)}/>}
+
+      <main key={phase}>
+        {phase==="complete"?<CompleteScreen data={data} progress={progress} rewards={rewards} onReview={()=>go("lesson")} onPhase={go}/>:
+         phase==="lesson"?<LessonPhase data={data} done={progress.lesson} onComplete={completeLesson}/>:
+         phase==="challenge"?<ChallengePhase data={data} done={progress.challenge} onSubmit={submitChallenge} onSkip={()=>go(progress.exam?"complete":"exam")}/>:
+         <ExamPhase data={data} done={progress.exam} onSubmit={submitExam} onFinish={()=>go("complete")}/>}
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
