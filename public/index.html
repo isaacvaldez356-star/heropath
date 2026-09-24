@@ -70,15 +70,12 @@ a{color:inherit;}
 const {useState,useEffect,useRef,useCallback,createContext,useContext}=React;
 
 // ── API ───────────────────────────────────────────────────
-// Si la página la sirve el propio backend (localhost:3001 o Railway) usamos rutas relativas.
-// Si se abre desde otro sitio, apuntamos al backend desplegado. Se puede forzar con localStorage "hp_api".
-const REMOTE_API="https://lovely-magic-production-a3a2.up.railway.app";
+// La API vive en el mismo dominio que la página (Vercel, Railway o localhost:3001).
+// Solo si se abre el HTML como archivo local se usa REMOTE_API. Se puede forzar con localStorage "hp_api".
+const REMOTE_API="https://heropath.vercel.app";
 const API=(()=>{
   try{const o=localStorage.getItem("hp_api");if(o)return o.replace(/\/$/,"");}catch{}
-  const {protocol,hostname,port}=location;
-  if(protocol==="file:") return REMOTE_API;
-  if(hostname.endsWith(".railway.app")||port==="3001") return "";
-  return REMOTE_API;
+  return location.protocol==="file:"?REMOTE_API:"";
 })();
 
 async function api(method,path,body,token){

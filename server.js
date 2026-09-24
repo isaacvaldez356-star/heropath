@@ -1,7 +1,7 @@
 /**
  * HeroPath Backend — API REST + frontend estático
- * Stack: Node.js + Express + NeDB (embedded) + JWT
- * Puerto: 3001 (o PORT)
+ * Stack: Node.js + Express + Postgres (Supabase, o PGlite en local) + JWT
+ * Local: `npm start` → http://localhost:3001 · Vercel: api/index.js exporta esta app.
  */
 
 require("dotenv").config();
@@ -9,10 +9,9 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
-const Datastore = require("nedb-promises");
 const path = require("path");
-const fs = require("fs");
 
+const db = require("./db");
 const {
   XP_SOURCES, RANKS, BRANCHES, COURSES, RESOURCES, BADGES, HABIT_MISSIONS,
   getCourse, getLesson,
@@ -20,26 +19,14 @@ const {
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const JWT_SECRET = process.env.JWT_SECRET || "heropath_secret_dev_2026";
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
+const PROD = process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL);
+const JWT_SECRET = process.env.JWT_SECRET || (PROD ? null : "heropath_secret_dev_2026");
 
-if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production")
-  console.warn("⚠️  JWT_SECRET no está definido: usa una clave propia en producción.");
+if (!JWT_SECRET) throw new Error("Falta la variable de entorno JWT_SECRET (obligatoria en producción).");
 
 // ── Middleware ────────────────────────────────────────────
 app.use(cors());
 app.use(express.json({ limit: "100kb" }));
-
-// ── Databases (embedded, no config needed) ────────────────
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-const store = name => Datastore.create({ filename: path.join(DATA_DIR, `${name}.db`), autoload: true });
-const db = {
-  users:    store("users"),
-  progress: store("progress"),
-  missions: store("missions"),
-  posts:    store("posts"),
-  badges:   store("badges"),
-};
 
 // Envuelve handlers async para no repetir try/catch
 const route = fn => (req, res, next) =>
@@ -47,6 +34,29 @@ const route = fn => (req, res, next) =>
     console.error(err);
     res.status(500).json({ error: "Error interno del servidor" });
   });
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = v => UUID_RE.test(String(v));
+
+// ── Columnas (snake_case en la base → camelCase en la API) ─
+const USER_COLS = `id, name, email, password, xp, streak, record_streak as "recordStreak",
+  last_active as "lastActive", created_at as "createdAt"`;
+const PROGRESS_COLS = `type, course_id as "courseId", lesson_number as "lessonNumber", branch_id as "branchId",
+  resource_id as "resourceId", report, score, total, passed, completed_at as "completedAt"`;
+
+const getUser = id => db.one(`select ${USER_COLS} from users where id = $1`, [id]);
+
+/** Inserta un registro de progreso. Devuelve false si ya existía (índice único) → no hay que premiarlo. */
+async function insertProgress(userId, f) {
+  const r = await db.query(
+    `insert into progress (user_id, type, course_id, lesson_number, branch_id, resource_id, report, score, total, passed)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     on conflict do nothing returning id`,
+    [userId, f.type, f.courseId ?? null, f.lessonNumber ?? null, f.branchId ?? null, f.resourceId ?? null,
+      f.report ?? null, f.score ?? null, f.total ?? null, f.passed ?? null]
+  );
+  return r.rows.length > 0;
+}
 
 // ── Fechas y racha ────────────────────────────────────────
 const dayKey = (d = new Date()) => d.toDateString();
@@ -57,8 +67,9 @@ async function touchStreak(user) {
   const yesterday = dayKey(new Date(Date.now() - 86400000));
   const streak = user.lastActive && dayKey(new Date(user.lastActive)) === yesterday ? (user.streak || 0) + 1 : 1;
   const recordStreak = Math.max(streak, user.recordStreak || 0);
-  const lastActive = new Date().toISOString();
-  await db.users.update({ _id: user._id }, { $set: { lastActive, streak, recordStreak } });
+  const lastActive = new Date();
+  await db.query("update users set last_active = $2, streak = $3, record_streak = $4 where id = $1",
+    [user.id, lastActive, streak, recordStreak]);
   return { ...user, lastActive, streak, recordStreak };
 }
 
@@ -72,9 +83,9 @@ const auth = route(async (req, res, next) => {
   } catch {
     return res.status(401).json({ error: "Token inválido o expirado" });
   }
-  const user = await db.users.findOne({ _id: payload.id });
+  const user = isUuid(payload.id) ? await getUser(payload.id) : null;
   if (!user) return res.status(401).json({ error: "Usuario no encontrado" });
-  req.user = { id: user._id, email: user.email };
+  req.user = { id: user.id, email: user.email };
   req.dbUser = await touchStreak(user);
   next();
 });
@@ -84,31 +95,33 @@ function getRank(xp) {
   return RANKS.findLast(r => xp >= r.min) || RANKS[0];
 }
 
+const addXP = (userId, amount) => db.query("update users set xp = xp + $2 where id = $1", [userId, amount]);
+
 /**
  * Ejecuta una acción que puede otorgar XP y devuelve la respuesta enriquecida con
  * las recompensas obtenidas, la XP total, el rango y si hubo subida de rango.
  * Dentro de fn usa ctx.give(amount, label) para sumar XP.
  */
 async function withRewards(userId, fn) {
-  const before = await db.users.findOne({ _id: userId });
+  const before = await getUser(userId);
   const ctx = {
     rewards: [],
     async give(amount, label) {
       if (!amount) return;
-      await db.users.update({ _id: userId }, { $inc: { xp: amount } });
+      await addXP(userId, amount);
       ctx.rewards.push({ label, xp: amount });
     },
   };
   const result = (await fn(ctx)) || {};
   await checkBadges(userId, ctx);
-  const after = await db.users.findOne({ _id: userId });
-  const from = getRank(before.xp || 0).name;
-  const to = getRank(after.xp || 0).name;
+  const after = await getUser(userId);
+  const from = getRank(before.xp).name;
+  const to = getRank(after.xp).name;
   return {
     ...result,
     rewards: ctx.rewards,
     earned: ctx.rewards.reduce((s, r) => s + r.xp, 0),
-    xp: after.xp || 0,
+    xp: after.xp,
     rank: to,
     rankUp: from !== to ? { from, to } : null,
   };
@@ -117,9 +130,8 @@ async function withRewards(userId, fn) {
 // ── Progreso de cursos ────────────────────────────────────
 const STEP_TYPES = ["lesson", "challenge", "exam"];
 
-async function loadProgress(userId) {
-  return db.progress.find({ userId });
-}
+const loadProgress = userId =>
+  db.many(`select ${PROGRESS_COLS} from progress where user_id = $1 and type <> 'exam_attempt'`, [userId]);
 
 /** Calcula el estado de cada curso a partir del progreso del usuario. */
 function computeCourseStates(entries) {
@@ -175,9 +187,9 @@ function publicCourse(c, state) {
 
 /** Siguiente lección recomendada: la primera pendiente del curso empezado más reciente. */
 function nextLessonFor(states, entries) {
-  const recent = [...entries]
+  const recent = entries
     .filter(e => STEP_TYPES.includes(e.type))
-    .sort((a, b) => (b.completedAt || "").localeCompare(a.completedAt || ""));
+    .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
   const order = [...new Set(recent.map(e => e.courseId)), ...COURSES.map(c => c.id)];
   for (const id of order) {
     const s = states[id];
@@ -194,56 +206,44 @@ function nextLessonFor(states, entries) {
 
 /** Tras cualquier avance en un curso: curso dominado, rama dominada y misiones de avance. */
 async function afterCourseProgress(userId, courseId, ctx) {
-  const entries = await loadProgress(userId);
-  const states = computeCourseStates(entries);
+  const states = computeCourseStates(await loadProgress(userId));
   const course = getCourse(courseId);
 
-  if (states[courseId].done && !entries.some(e => e.type === "course" && e.courseId === courseId)) {
-    await db.progress.insert({ userId, type: "course", courseId, completedAt: new Date().toISOString() });
+  if (states[courseId].done && await insertProgress(userId, { type: "course", courseId }))
     await ctx.give(XP_SOURCES.course_complete, `Curso dominado: ${course.title}`);
-  }
 
   const branch = BRANCHES.find(b => b.id === course.branchId);
   const playable = branch.courses.filter(c => states[c.id].availableCount > 0);
-  if (playable.every(c => states[c.id].done) && !entries.some(e => e.type === "branch" && e.branchId === branch.id)) {
-    await db.progress.insert({ userId, type: "branch", branchId: branch.id, completedAt: new Date().toISOString() });
+  if (playable.every(c => states[c.id].done) && await insertProgress(userId, { type: "branch", branchId: branch.id }))
     await ctx.give(XP_SOURCES.branch_mastered, `Rama dominada: ${branch.name}`);
-  }
 
-  const doc = await db.missions.findOne({ userId, date: dayKey() });
+  const doc = await getMissions(userId);
   const mission = doc?.missions.find(m => m.type === "advance" && m.courseId === courseId && !m.done);
   if (mission) await completeMission(userId, doc, mission.id, ctx);
-
-  return computeCourseStates(await loadProgress(userId));
 }
 
 // ── Badges ────────────────────────────────────────────────
 async function buildStats(userId) {
-  const [user, entries, posts] = await Promise.all([
-    db.users.findOne({ _id: userId }),
-    loadProgress(userId),
-    db.posts.count({ userId }),
-  ]);
-  return {
-    xp: user.xp || 0,
-    recordStreak: user.recordStreak || 0,
-    lessons: entries.filter(e => e.type === "lesson").length,
-    resources: entries.filter(e => e.type === "resource").length,
-    coursesDone: entries.filter(e => e.type === "course").map(e => e.courseId),
-    posts,
-  };
+  const s = await db.one(
+    `select u.xp, u.record_streak as "recordStreak",
+       (select count(*)::int from progress where user_id = u.id and type = 'lesson')   as lessons,
+       (select count(*)::int from progress where user_id = u.id and type = 'resource') as resources,
+       (select count(*)::int from posts    where user_id = u.id)                       as posts,
+       coalesce((select array_agg(course_id) from progress where user_id = u.id and type = 'course'), '{}') as "coursesDone"
+     from users u where u.id = $1`, [userId]);
+  return s;
 }
 
 async function checkBadges(userId, ctx) {
   // Repite porque la XP de un badge puede desbloquear otro (p. ej. Rango Héroe)
   for (let round = 0; round < 5; round++) {
-    const earnedIds = (await db.badges.find({ userId })).map(b => b.badgeId);
+    const earnedIds = (await db.many("select badge_id from badges where user_id = $1", [userId])).map(b => b.badge_id);
     const stats = await buildStats(userId);
     const fresh = BADGES.filter(b => !earnedIds.includes(b.id) && b.check(stats));
     if (!fresh.length) return;
     for (const b of fresh) {
-      await db.badges.insert({ userId, badgeId: b.id, earnedAt: new Date().toISOString() });
-      await ctx.give(b.xp, `Badge: ${b.name}`);
+      const r = await db.query("insert into badges (user_id, badge_id) values ($1, $2) on conflict do nothing returning badge_id", [userId, b.id]);
+      if (r.rows.length) await ctx.give(b.xp, `Badge: ${b.name}`);
     }
   }
 }
@@ -252,7 +252,7 @@ async function checkBadges(userId, ctx) {
 //  AUTH ROUTES
 // ═══════════════════════════════════════════════════════════
 
-const signToken = user => jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, { expiresIn: "30d" });
+const signToken = user => jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "30d" });
 const normEmail = e => String(e || "").trim().toLowerCase();
 
 app.post("/api/auth/register", route(async (req, res) => {
@@ -268,20 +268,17 @@ app.post("/api/auth/register", route(async (req, res) => {
   if (password.length < 6)
     return res.status(400).json({ error: "La contraseña debe tener al menos 6 caracteres" });
 
-  if (await db.users.findOne({ email })) return res.status(409).json({ error: "Este email ya está registrado" });
-
   const hash = await bcrypt.hash(password, 10);
-  const user = await db.users.insert({
-    name, email, password: hash,
-    xp: 0, streak: 1, recordStreak: 1,
-    lastActive: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-  });
+  const user = await db.one(
+    `insert into users (name, email, password, streak, record_streak, last_active)
+     values ($1, $2, $3, 1, 1, now()) on conflict (email) do nothing returning id, email`,
+    [name, email, hash]);
+  if (!user) return res.status(409).json({ error: "Este email ya está registrado" });
 
   res.status(201).json({
     message: "¡Bienvenido a HeroPath!",
     token: signToken(user),
-    user: { id: user._id, name, email, xp: 0, rank: "Recluta", streak: 1 },
+    user: { id: user.id, name, email, xp: 0, rank: "Recluta", streak: 1 },
   });
 }));
 
@@ -290,44 +287,44 @@ app.post("/api/auth/login", route(async (req, res) => {
   const password = String(req.body.password || "");
   if (!email || !password) return res.status(400).json({ error: "Email y contraseña requeridos" });
 
-  const found = await db.users.findOne({ email });
+  const found = await db.one(`select ${USER_COLS} from users where email = $1`, [email]);
   if (!found || !(await bcrypt.compare(password, found.password)))
     return res.status(401).json({ error: "Email o contraseña incorrectos" });
 
   const user = await touchStreak(found);
   res.json({
     token: signToken(user),
-    user: { id: user._id, name: user.name, email, xp: user.xp || 0, rank: getRank(user.xp || 0).name, streak: user.streak },
+    user: { id: user.id, name: user.name, email, xp: user.xp, rank: getRank(user.xp).name, streak: user.streak },
   });
 }));
 
 app.get("/api/auth/me", auth, route(async (req, res) => {
-  await checkBadges(req.user.id, { give: (amount) => db.users.update({ _id: req.user.id }, { $inc: { xp: amount } }) });
-  const user = await db.users.findOne({ _id: req.user.id });
-  const xp = user.xp || 0;
-  const rank = getRank(xp);
-  const nextRank = RANKS.find(r => r.min > xp);
-  const [pos, badgesCount, entries] = await Promise.all([
-    db.users.count({ xp: { $gt: xp } }),
-    db.badges.count({ userId: user._id }),
-    loadProgress(user._id),
-  ]);
+  await checkBadges(req.user.id, { give: amount => addXP(req.user.id, amount) });
+  const user = await getUser(req.user.id);
+  const rank = getRank(user.xp);
+  const nextRank = RANKS.find(r => r.min > user.xp);
+  const s = await db.one(
+    `select (select count(*)::int from users where xp > $2) as above,
+       (select count(*)::int from badges where user_id = $1) as badges,
+       (select count(*)::int from progress where user_id = $1 and type = 'lesson') as lessons,
+       (select count(*)::int from progress where user_id = $1 and type = 'course') as courses`,
+    [user.id, user.xp]);
   res.json({
-    id: user._id,
+    id: user.id,
     name: user.name,
     email: user.email,
-    xp,
+    xp: user.xp,
     rank: rank.name,
     rankMin: rank.min,
     rankMax: rank.max === Infinity ? null : rank.max,
     nextRank: nextRank?.name || null,
     nextRankXP: nextRank?.min || null,
-    streak: user.streak || 0,
-    recordStreak: user.recordStreak || 0,
-    pos: pos + 1,
-    badgesCount,
-    lessonsCompleted: entries.filter(e => e.type === "lesson").length,
-    coursesCompleted: entries.filter(e => e.type === "course").length,
+    streak: user.streak,
+    recordStreak: user.recordStreak,
+    pos: s.above + 1,
+    badgesCount: s.badges,
+    lessonsCompleted: s.lessons,
+    coursesCompleted: s.courses,
     createdAt: user.createdAt,
   });
 }));
@@ -370,6 +367,9 @@ async function resolveLesson(req, res) {
   return { course: c, n, lesson, state: states[c.id], progress: states[c.id].lessons.find(l => l.n === n) };
 }
 
+const passScore = lesson => Math.ceil(lesson.exam.length * 0.75);
+const step = (course, n, type) => ({ type, courseId: course.id, lessonNumber: n });
+
 // GET /api/courses/:courseId/lessons/:n — contenido (sin respuestas del examen)
 app.get("/api/courses/:courseId/lessons/:n", auth, route(async (req, res) => {
   const r = await resolveLesson(req, res);
@@ -377,7 +377,10 @@ app.get("/api/courses/:courseId/lessons/:n", auth, route(async (req, res) => {
   const { course, n, lesson, state, progress } = r;
   const available = state.lessons.filter(l => l.available);
   const idx = available.findIndex(l => l.n === n);
-  const bestExam = await db.progress.find({ userId: req.user.id, type: "exam_attempt", courseId: course.id, lessonNumber: n });
+  const best = await db.one(
+    `select coalesce(max(score), 0)::int as score from progress
+     where user_id = $1 and type = 'exam_attempt' and course_id = $2 and lesson_number = $3`,
+    [req.user.id, course.id, n]);
   res.json({
     course: { ...publicCourse(course, state), lessons: state.lessons },
     lesson: {
@@ -393,17 +396,11 @@ app.get("/api/courses/:courseId/lessons/:n", auth, route(async (req, res) => {
       passScore: passScore(lesson),
       xp: { lesson: XP_SOURCES.lesson_complete, challenge: XP_SOURCES.challenge_complete, exam: XP_SOURCES.exam_pass },
     },
-    progress: {
-      lesson: progress.lesson, challenge: progress.challenge, exam: progress.exam,
-      bestScore: bestExam.reduce((m, a) => Math.max(m, a.score), 0),
-    },
+    progress: { lesson: progress.lesson, challenge: progress.challenge, exam: progress.exam, bestScore: best.score },
     prev: available[idx - 1] ? { n: available[idx - 1].n, title: available[idx - 1].title } : null,
     next: available[idx + 1] ? { n: available[idx + 1].n, title: available[idx + 1].title } : null,
   });
 }));
-
-const passScore = lesson => Math.ceil(lesson.exam.length * 0.75);
-const stepKey = (req, course, n, type) => ({ userId: req.user.id, type, courseId: course.id, lessonNumber: n });
 
 // POST /api/courses/:courseId/lessons/:n/complete — lección leída
 app.post("/api/courses/:courseId/lessons/:n/complete", auth, route(async (req, res) => {
@@ -411,7 +408,7 @@ app.post("/api/courses/:courseId/lessons/:n/complete", auth, route(async (req, r
   if (!r) return;
   if (r.progress.lesson) return res.json({ alreadyDone: true, rewards: [], earned: 0 });
   const out = await withRewards(req.user.id, async ctx => {
-    await db.progress.insert({ ...stepKey(req, r.course, r.n, "lesson"), completedAt: new Date().toISOString() });
+    if (!(await insertProgress(req.user.id, step(r.course, r.n, "lesson")))) return { alreadyDone: true };
     await ctx.give(XP_SOURCES.lesson_complete, "Lección completada");
     await afterCourseProgress(req.user.id, r.course.id, ctx);
     return { message: "Lección completada" };
@@ -429,19 +426,23 @@ app.post("/api/courses/:courseId/lessons/:n/challenge", auth, route(async (req, 
   if (!r.progress.lesson) return res.status(400).json({ error: "Primero completa la lección" });
   if (r.progress.challenge) return res.status(409).json({ error: "Reto ya entregado", alreadyDone: true });
 
+  let duplicate = false;
   const out = await withRewards(req.user.id, async ctx => {
-    await db.progress.insert({ ...stepKey(req, r.course, r.n, "challenge"), report, completedAt: new Date().toISOString() });
+    if (!(await insertProgress(req.user.id, { ...step(r.course, r.n, "challenge"), report }))) {
+      duplicate = true;
+      return;
+    }
     await ctx.give(XP_SOURCES.challenge_complete, "Reto entregado");
     if (req.body.share) {
       const text = `Reto completado · ${r.course.title}: ${r.lesson.challenge.title}\n\n${report}`.slice(0, 280);
-      await db.posts.insert({
-        userId: req.user.id, text, achievement: { type: "challenge", courseId: r.course.id, title: r.lesson.challenge.title },
-        likes: [], comments: [], createdAt: new Date().toISOString(),
-      });
+      await db.query("insert into posts (user_id, text, achievement) values ($1, $2, $3)", [
+        req.user.id, text, JSON.stringify({ type: "challenge", courseId: r.course.id, title: r.lesson.challenge.title }),
+      ]);
     }
     await afterCourseProgress(req.user.id, r.course.id, ctx);
     return { message: "Reto entregado", shared: Boolean(req.body.share) };
   });
+  if (duplicate) return res.status(409).json({ error: "Reto ya entregado", alreadyDone: true });
   res.json(out);
 }));
 
@@ -468,21 +469,21 @@ app.post("/api/courses/:courseId/lessons/:n/exam", auth, route(async (req, res) 
   const passed = score >= passScore(r.lesson);
 
   const out = await withRewards(req.user.id, async ctx => {
-    await db.progress.insert({ ...stepKey(req, r.course, r.n, "exam_attempt"), score, total, passed, completedAt: new Date().toISOString() });
-    if (passed && !r.progress.exam) {
-      await db.progress.insert({ ...stepKey(req, r.course, r.n, "exam"), score, total, completedAt: new Date().toISOString() });
+    await insertProgress(req.user.id, { ...step(r.course, r.n, "exam_attempt"), score, total, passed });
+    const firstPass = passed && await insertProgress(req.user.id, { ...step(r.course, r.n, "exam"), score, total, passed });
+    if (firstPass) {
       await ctx.give(XP_SOURCES.exam_pass, "Examen aprobado");
       await afterCourseProgress(req.user.id, r.course.id, ctx);
     }
-    return { score, total, passed, passScore: passScore(r.lesson), firstPass: passed && !r.progress.exam,
+    return { score, total, passed, passScore: passScore(r.lesson), firstPass,
       message: passed ? "Examen aprobado 🏆" : "Sigue practicando" };
   });
   res.json(out);
 }));
 
-// GET /api/progress — historial crudo del usuario
+// GET /api/progress — historial del usuario (incluye intentos de examen)
 app.get("/api/progress", auth, route(async (req, res) => {
-  res.json(await loadProgress(req.user.id));
+  res.json(await db.many(`select ${PROGRESS_COLS} from progress where user_id = $1 order by completed_at`, [req.user.id]));
 }));
 
 // ═══════════════════════════════════════════════════════════
@@ -490,19 +491,23 @@ app.get("/api/progress", auth, route(async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 
 app.get("/api/library", auth, route(async (req, res) => {
-  const done = await db.progress.find({ userId: req.user.id, type: "resource" });
-  res.json(RESOURCES.map(r => ({ ...r, done: done.some(d => d.resourceId === r.id), xp: XP_SOURCES.resource_read })));
+  const done = new Set((await db.many(
+    "select resource_id from progress where user_id = $1 and type = 'resource'", [req.user.id])).map(d => d.resource_id));
+  res.json(RESOURCES.map(r => ({ ...r, done: done.has(r.id), xp: XP_SOURCES.resource_read })));
 }));
 
 app.post("/api/library/:id/complete", auth, route(async (req, res) => {
   const resource = RESOURCES.find(r => r.id === req.params.id);
   if (!resource) return res.status(404).json({ error: "Recurso no encontrado" });
-  if (await db.progress.findOne({ userId: req.user.id, type: "resource", resourceId: resource.id }))
-    return res.status(409).json({ error: "Recurso ya completado", alreadyDone: true });
+  let duplicate = false;
   const out = await withRewards(req.user.id, async ctx => {
-    await db.progress.insert({ userId: req.user.id, type: "resource", resourceId: resource.id, completedAt: new Date().toISOString() });
+    if (!(await insertProgress(req.user.id, { type: "resource", resourceId: resource.id }))) {
+      duplicate = true;
+      return;
+    }
     await ctx.give(XP_SOURCES.resource_read, `Recurso: ${resource.title}`);
   });
+  if (duplicate) return res.status(409).json({ error: "Recurso ya completado", alreadyDone: true });
   res.json(out);
 }));
 
@@ -519,9 +524,12 @@ const shuffle = arr => {
   return a;
 };
 
+const getMissions = userId =>
+  db.one(`select day as date, missions, bonus_claimed as "bonusClaimed" from missions where user_id = $1 and day = $2`,
+    [userId, dayKey()]);
+
 async function seedDailyMissions(userId) {
-  const today = dayKey();
-  const existing = await db.missions.findOne({ userId, date: today });
+  const existing = await getMissions(userId);
   if (existing) return existing;
 
   // 1 misión de avance (si hay cursos con lecciones pendientes) + hábitos hasta completar 3
@@ -532,15 +540,22 @@ async function seedDailyMissions(userId) {
   const habits = shuffle(HABIT_MISSIONS).slice(0, 3 - advance.length);
   const missions = [...advance, ...habits].map((m, i) => ({ ...m, id: i + 1, done: false }));
 
-  return db.missions.insert({ userId, date: today, missions, bonusClaimed: false, createdAt: new Date().toISOString() });
+  await db.query("insert into missions (user_id, day, missions) values ($1, $2, $3) on conflict do nothing",
+    [userId, dayKey(), JSON.stringify(missions)]);
+  return getMissions(userId);
 }
 
+/** Marca una misión. Usa el documento leído como condición para no premiar dos veces en peticiones simultáneas. */
 async function completeMission(userId, doc, missionId, ctx) {
   const missions = doc.missions.map(m => (m.id === missionId ? { ...m, done: true, doneAt: new Date().toISOString() } : m));
   const mission = missions.find(m => m.id === missionId);
   const allDone = missions.every(m => m.done);
   const giveBonus = allDone && !doc.bonusClaimed;
-  await db.missions.update({ _id: doc._id }, { $set: { missions, bonusClaimed: doc.bonusClaimed || allDone } });
+  const r = await db.query(
+    `update missions set missions = $3, bonus_claimed = $4
+     where user_id = $1 and day = $2 and missions = $5::jsonb returning day`,
+    [userId, doc.date, JSON.stringify(missions), doc.bonusClaimed || allDone, JSON.stringify(doc.missions)]);
+  if (!r.rows.length) return { conflict: true };
   await ctx.give(mission.xp, `Misión: ${mission.title}`);
   if (giveBonus) await ctx.give(XP_SOURCES.daily_bonus, "Bono diario: 3 misiones");
   return { allDone, bonusEarned: giveBonus ? XP_SOURCES.daily_bonus : 0 };
@@ -552,7 +567,7 @@ app.get("/api/missions/today", auth, route(async (req, res) => {
 }));
 
 app.patch("/api/missions/:missionId/complete", auth, route(async (req, res) => {
-  const doc = await db.missions.findOne({ userId: req.user.id, date: dayKey() });
+  const doc = await getMissions(req.user.id);
   if (!doc) return res.status(404).json({ error: "No hay misiones para hoy" });
   const mId = parseInt(req.params.missionId, 10);
   const mission = doc.missions.find(m => m.id === mId);
@@ -562,6 +577,7 @@ app.patch("/api/missions/:missionId/complete", auth, route(async (req, res) => {
     return res.status(400).json({ error: "Esta misión se completa al avanzar en el curso" });
 
   const out = await withRewards(req.user.id, ctx => completeMission(req.user.id, doc, mId, ctx));
+  if (out.conflict) return res.status(409).json({ error: "Misión ya completada" });
   res.json({ message: "Misión completada", ...out });
 }));
 
@@ -569,27 +585,30 @@ app.patch("/api/missions/:missionId/complete", auth, route(async (req, res) => {
 //  COMUNIDAD
 // ═══════════════════════════════════════════════════════════
 
-async function enrichPosts(posts, meId) {
-  const ids = [...new Set(posts.flatMap(p => [p.userId, ...p.comments.map(c => c.userId)]))];
-  const users = await db.users.find({ _id: { $in: ids } });
-  const byId = Object.fromEntries(users.map(u => [u._id, u]));
-  return posts.map(p => {
-    const u = byId[p.userId];
-    return {
-      _id: p._id, userId: p.userId, text: p.text, achievement: p.achievement, createdAt: p.createdAt,
-      userName: u?.name || "Héroe anónimo",
-      userRank: getRank(u?.xp || 0).name,
-      likeCount: p.likes.length,
-      likedByMe: p.likes.includes(meId),
-      comments: p.comments.map(c => ({ ...c, userName: byId[c.userId]?.name || c.userName })),
-    };
-  });
+const POST_SELECT = `
+  select p.id as "_id", p.user_id as "userId", p.text, p.achievement, p.created_at as "createdAt",
+    u.name as "userName", u.xp as "userXp",
+    (select count(*)::int from post_likes l where l.post_id = p.id) as "likeCount",
+    exists (select 1 from post_likes l where l.post_id = p.id and l.user_id = $1) as "likedByMe"
+  from posts p join users u on u.id = p.user_id`;
+
+async function withComments(posts) {
+  if (!posts.length) return [];
+  const comments = await db.many(
+    `select c.post_id as "postId", c.user_id as "userId", u.name as "userName", c.text, c.created_at as "createdAt"
+     from post_comments c join users u on u.id = c.user_id
+     where c.post_id = any($1::uuid[]) order by c.created_at`, [posts.map(p => p._id)]);
+  return posts.map(({ userXp, ...p }) => ({
+    ...p,
+    userRank: getRank(userXp).name,
+    comments: comments.filter(c => c.postId === p._id).map(({ postId, ...c }) => c),
+  }));
 }
 
 app.get("/api/posts", auth, route(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
-  const posts = await db.posts.find({}).sort({ createdAt: -1 }).limit(limit);
-  res.json(await enrichPosts(posts, req.user.id));
+  const posts = await db.many(`${POST_SELECT} order by p.created_at desc limit $2`, [req.user.id, limit]);
+  res.json(await withComments(posts));
 }));
 
 app.post("/api/posts", auth, route(async (req, res) => {
@@ -597,40 +616,43 @@ app.post("/api/posts", auth, route(async (req, res) => {
   if (text.length < 5) return res.status(400).json({ error: "El texto debe tener al menos 5 caracteres" });
   if (text.length > 280) return res.status(400).json({ error: "Máximo 280 caracteres" });
 
-  let post;
+  let id;
   const out = await withRewards(req.user.id, async () => {
-    post = await db.posts.insert({ userId: req.user.id, text, achievement: null, likes: [], comments: [], createdAt: new Date().toISOString() });
+    ({ id } = await db.one("insert into posts (user_id, text) values ($1, $2) returning id", [req.user.id, text]));
   });
-  const [enriched] = await enrichPosts([post], req.user.id);
-  res.status(201).json({ ...enriched, ...out, _id: post._id });
+  const [post] = await withComments(await db.many(`${POST_SELECT} where p.id = $2`, [req.user.id, id]));
+  res.status(201).json({ ...post, ...out });
 }));
 
 app.delete("/api/posts/:id", auth, route(async (req, res) => {
-  const post = await db.posts.findOne({ _id: req.params.id });
+  const post = isUuid(req.params.id) && await db.one("select user_id from posts where id = $1", [req.params.id]);
   if (!post) return res.status(404).json({ error: "Post no encontrado" });
-  if (post.userId !== req.user.id) return res.status(403).json({ error: "Solo puedes borrar tus publicaciones" });
-  await db.posts.remove({ _id: post._id });
+  if (post.user_id !== req.user.id) return res.status(403).json({ error: "Solo puedes borrar tus publicaciones" });
+  await db.query("delete from posts where id = $1", [req.params.id]);
   res.json({ deleted: true });
 }));
 
 app.post("/api/posts/:id/like", auth, route(async (req, res) => {
-  const post = await db.posts.findOne({ _id: req.params.id });
+  const post = isUuid(req.params.id) && await db.one("select id from posts where id = $1", [req.params.id]);
   if (!post) return res.status(404).json({ error: "Post no encontrado" });
-  const liked = post.likes.includes(req.user.id);
-  await db.posts.update({ _id: post._id }, liked ? { $pull: { likes: req.user.id } } : { $addToSet: { likes: req.user.id } });
-  res.json({ liked: !liked, likeCount: post.likes.length + (liked ? -1 : 1) });
+  const removed = await db.query("delete from post_likes where post_id = $1 and user_id = $2 returning post_id", [post.id, req.user.id]);
+  if (!removed.rows.length)
+    await db.query("insert into post_likes (post_id, user_id) values ($1, $2) on conflict do nothing", [post.id, req.user.id]);
+  const { count } = await db.one("select count(*)::int as count from post_likes where post_id = $1", [post.id]);
+  res.json({ liked: !removed.rows.length, likeCount: count });
 }));
 
 app.post("/api/posts/:id/comment", auth, route(async (req, res) => {
   const text = String(req.body.text || "").trim();
   if (text.length < 2) return res.status(400).json({ error: "Comentario muy corto" });
   if (text.length > 280) return res.status(400).json({ error: "Máximo 280 caracteres" });
-  const post = await db.posts.findOne({ _id: req.params.id });
+  const post = isUuid(req.params.id) && await db.one("select id from posts where id = $1", [req.params.id]);
   if (!post) return res.status(404).json({ error: "Post no encontrado" });
 
-  const comment = { userId: req.user.id, userName: req.dbUser.name, text, createdAt: new Date().toISOString() };
-  await db.posts.update({ _id: post._id }, { $push: { comments: comment } });
-  res.status(201).json(comment);
+  const c = await db.one(
+    `insert into post_comments (post_id, user_id, text) values ($1, $2, $3) returning created_at as "createdAt"`,
+    [post.id, req.user.id, text]);
+  res.status(201).json({ userId: req.user.id, userName: req.dbUser.name, text, createdAt: c.createdAt });
 }));
 
 // ═══════════════════════════════════════════════════════════
@@ -639,19 +661,20 @@ app.post("/api/posts/:id/comment", auth, route(async (req, res) => {
 
 app.get("/api/leaderboard", auth, route(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
-  const users = await db.users.find({}).sort({ xp: -1 }).limit(limit);
+  const users = await db.many("select id, name, xp, streak from users order by xp desc, created_at limit $1", [limit]);
   const entry = (u, pos) => ({
-    pos, id: u._id, name: u.name, xp: u.xp || 0, rank: getRank(u.xp || 0).name,
-    streak: u.streak || 0, isMe: u._id === req.user.id,
+    pos, id: u.id, name: u.name, xp: u.xp, rank: getRank(u.xp).name, streak: u.streak, isMe: u.id === req.user.id,
   });
   const board = users.map((u, i) => entry(u, i + 1));
 
   let myEntry = board.find(u => u.isMe) || null;
   if (!myEntry) {
     const me = req.dbUser;
-    myEntry = entry(me, (await db.users.count({ xp: { $gt: me.xp || 0 } })) + 1);
+    const { above } = await db.one("select count(*)::int as above from users where xp > $1", [me.xp]);
+    myEntry = entry(me, above + 1);
   }
-  res.json({ leaderboard: board, myEntry, total: await db.users.count({}) });
+  const { total } = await db.one("select count(*)::int as total from users");
+  res.json({ leaderboard: board, myEntry, total });
 }));
 
 // ═══════════════════════════════════════════════════════════
@@ -659,31 +682,37 @@ app.get("/api/leaderboard", auth, route(async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 
 app.get("/api/badges", auth, route(async (req, res) => {
-  const earned = await db.badges.find({ userId: req.user.id });
+  const earned = await db.many(`select badge_id, earned_at as "earnedAt" from badges where user_id = $1`, [req.user.id]);
   res.json(BADGES.map(({ check, ...b }) => {
-    const e = earned.find(x => x.badgeId === b.id);
+    const e = earned.find(x => x.badge_id === b.id);
     return { ...b, earned: Boolean(e), earnedAt: e?.earnedAt || null };
   }));
 }));
 
 app.get("/api/xp/sources", (req, res) => res.json(XP_SOURCES));
 
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", app: "HeroPath API", version: "2.0.0", timestamp: new Date().toISOString() });
-});
+app.get("/api/health", route(async (req, res) => {
+  await db.query("select 1");
+  res.json({ status: "ok", app: "HeroPath API", version: "3.0.0", db: process.env.DATABASE_URL ? "postgres" : "pglite",
+    timestamp: new Date().toISOString() });
+}));
 
 app.use("/api", (req, res) => res.status(404).json({ error: "Ruta no encontrada" }));
 
 // ── Frontend ──────────────────────────────────────────────
-// Solo se sirven los HTML de la app (nunca la carpeta completa: contiene server.js, .env y data/)
-app.get(["/", "/index.html"], (req, res) => res.sendFile(path.join(__dirname, "index.html")));
-app.get("/leccion.html", (req, res) => res.sendFile(path.join(__dirname, "leccion.html")));
+// En Vercel los HTML de public/ se sirven como estáticos; aquí para local y Railway.
+app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"] }));
 
 // ── Start ─────────────────────────────────────────────────
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`\n🏆 HeroPath corriendo en http://localhost:${PORT}`);
-    console.log(`   Health: http://localhost:${PORT}/api/health\n`);
+  db.init().then(() => {
+    app.listen(PORT, () => {
+      console.log(`\n🏆 HeroPath corriendo en http://localhost:${PORT}`);
+      console.log(`   Base de datos: ${process.env.DATABASE_URL ? "Postgres (DATABASE_URL)" : "PGlite local"}\n`);
+    });
+  }).catch(err => {
+    console.error("No se pudo conectar a la base de datos:", err.message);
+    process.exit(1);
   });
 }
 

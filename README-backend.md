@@ -2,53 +2,66 @@
 
 App de desarrollo personal gamificada: un árbol de habilidades con 6 ramas, cursos con lecciones (lección → reto → examen), XP, rangos, rachas, misiones diarias, badges, librería y comunidad.
 
-El mismo servidor Node sirve la API y el frontend (`index.html` + `leccion.html`).
+Se despliega en **Vercel** (frontend estático + API como función serverless) con **Supabase** (Postgres) como base de datos. En local funciona sin configurar nada gracias a PGlite (Postgres embebido).
 
 ## Stack
-- **Runtime:** Node.js 18+
-- **Framework:** Express
-- **Base de datos:** NeDB (embebida, archivos en `data/` o `DATA_DIR`)
+- **Runtime:** Node.js 20+
+- **API:** Express (en Vercel corre como función en `api/index.js`)
+- **Base de datos:** Postgres — Supabase en producción, PGlite en local y tests
 - **Auth:** JWT (30 días) + bcryptjs
-- **Frontend:** React 18 + Babel standalone (sin build)
+- **Frontend:** React 18 + Babel standalone (sin build), en `public/`
 
 ## Estructura
 
 | Archivo | Qué contiene |
 |---------|--------------|
-| `server.js` | API REST, lógica de progreso, XP, badges y misiones. Sirve los HTML. |
+| `server.js` | API REST, lógica de progreso, XP, badges y misiones. En local también sirve `public/`. |
+| `db.js` | Conexión: `pg` si hay `DATABASE_URL`, PGlite si no. Aplica el esquema al arrancar. |
+| `supabase/schema.sql` | Tablas, índices únicos anti‑duplicados y RLS. Idempotente. |
+| `api/index.js` | Entrada de la función de Vercel. |
+| `vercel.json` | Sirve `public/` y envía `/api/*` a la función. |
 | `catalog.js` | Ramas, cursos (temario), recursos de la librería, badges, misiones y valores de XP. |
 | `lessons/` | Contenido de las lecciones, un archivo por rama (`cuerpo.js`, `mente.js`…). `index.js` los une. |
-| `index.html` | App principal: Inicio, Árbol, Escuela, Librería, Comunidad y Perfil. |
-| `leccion.html` | Reproductor de lección: `leccion.html?course=<id>&lesson=<n>`. |
+| `public/index.html` | App principal: Inicio, Árbol, Escuela, Librería, Comunidad y Perfil. |
+| `public/leccion.html` | Reproductor de lección: `leccion.html?course=<id>&lesson=<n>`. |
 | `test/api.test.js` | Tests de integración de la API. |
 
 ---
 
-## Arranque
+## Desarrollo local
 
 ```bash
 npm install
-npm start          # http://localhost:3001
+npm start          # http://localhost:3001 (PGlite en data/)
 npm test           # tests de la API
 ```
 
-Abre `http://localhost:3001` y crea una cuenta.
-
-### Variables de entorno (.env)
-
-```
-PORT=3001
-JWT_SECRET=cambia_esto_en_produccion
-NODE_ENV=production
-DATA_DIR=/data     # opcional: carpeta de la base de datos
-```
-
-### Despliegue en Railway
-El `Procfile` arranca `node server.js`. El sistema de archivos de Railway es efímero: monta un **Volume** y apunta `DATA_DIR` a él, o los usuarios se perderán en cada deploy.
-
-Si el frontend se abre desde otro dominio, apunta por defecto a `https://lovely-magic-production-a3a2.up.railway.app`. Para usar otro backend: `localStorage.setItem("hp_api","https://tu-backend")`.
+Para probar contra Supabase en local, copia `.env.example` a `.env` y rellena `DATABASE_URL`.
 
 ---
+
+## Despliegue: Supabase + Vercel
+
+### 1. Supabase
+1. Crea un proyecto en [supabase.com](https://supabase.com) y guarda la contraseña de la base de datos.
+2. *(Opcional)* En **SQL Editor** pega y ejecuta `supabase/schema.sql`. Si no, el servidor lo aplica solo en el primer arranque.
+3. En **Connect → Connection string** copia la del **Transaction pooler** (puerto `6543`) y sustituye `[YOUR-PASSWORD]`. Es la adecuada para funciones serverless.
+
+### 2. Vercel
+1. En [vercel.com](https://vercel.com) → **Add New → Project** → importa este repositorio de GitHub. Framework preset: **Other** (no hace falta build).
+2. En **Settings → Environment Variables** añade:
+   - `DATABASE_URL` → la cadena del pooler de Supabase
+   - `JWT_SECRET` → una clave larga aleatoria (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`). Es obligatoria: sin ella la API no arranca.
+3. Deploy. Comprueba `https://<tu-proyecto>.vercel.app/api/health` → `"db": "postgres"`.
+
+Cada push a la rama principal se despliega solo; las demás ramas generan previews.
+
+### Seguridad
+- Las tablas tienen **RLS activado sin políticas**: la API REST pública de Supabase (clave `anon`) no puede leer ni escribir nada. Solo el backend, que se conecta como `postgres`, accede a los datos.
+- Nunca pongas la `DATABASE_URL` ni la `service_role` key en el frontend.
+
+### Railway (alternativa)
+El `Procfile` sigue funcionando: define `DATABASE_URL` y `JWT_SECRET` en Railway y la app sirve API y frontend desde el mismo dominio.
 
 ## Cómo funciona el progreso
 
@@ -149,6 +162,5 @@ Primer paso · Invocador · Atleta (10 lecciones) · Erudito (5 recursos) · Voz
 
 ## Próximos pasos
 1. Escribir el resto de lecciones en `lessons/` (hoy hay 36: todos los cursos tienen contenido; los de tier 1 y 2 tienen al menos 2 lecciones).
-2. Migrar NeDB a **PostgreSQL** (Supabase) o **MongoDB Atlas** cuando crezca el número de usuarios.
-3. Añadir rate limiting (`express-rate-limit`) en login y registro.
-4. Retos semanales y "jefe del mes" (los valores de XP ya están definidos en `catalog.js`).
+2. Añadir rate limiting (`express-rate-limit`) en login y registro.
+3. Retos semanales y "jefe del mes" (los valores de XP ya están definidos en `catalog.js`).

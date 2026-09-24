@@ -5,7 +5,7 @@ const os = require("os");
 const path = require("path");
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "heropath-test-"));
-const { app } = require("../server");
+const { app, db } = require("../server");
 const LESSONS = require("../lessons");
 const { COURSES } = require("../catalog");
 
@@ -27,8 +27,9 @@ before(async () => {
   token = reg.body.token;
 });
 
-after(() => {
+after(async () => {
   server.close();
+  await db.close();
   fs.rmSync(process.env.DATA_DIR, { recursive: true, force: true });
 });
 
@@ -140,4 +141,14 @@ test("comunidad: like, comentario y solo el autor borra", async () => {
 test("endpoints de trampa eliminados", async () => {
   assert.equal((await call("POST", "/api/xp/add", { source: "monthly_boss" })).status, 404);
   assert.equal((await call("POST", "/api/badges/award", { badgeId: "inmortal" })).status, 404);
+});
+
+test("peticiones simultáneas no duplican XP", async () => {
+  const reg = await call("POST", "/api/auth/register", { name: "Rápido", email: "race@heropath.com", password: "hero123" }, null);
+  const tok = reg.body.token;
+  const results = await Promise.all(Array.from({ length: 6 }, () => call("POST", "/api/courses/social/lessons/1/complete", null, tok)));
+  const lessonRewards = results.flatMap(r => r.body.rewards || []).filter(r => r.label === "Lección completada");
+  assert.equal(lessonRewards.length, 1);
+  const lib = await Promise.all(Array.from({ length: 4 }, () => call("POST", "/api/library/estoicismo/complete", null, tok)));
+  assert.equal(lib.filter(r => r.status === 200).length, 1);
 });
